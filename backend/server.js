@@ -9,24 +9,34 @@ const quotationRoutes = require("./routes/quotationRoutes");
 
 const app = express();
 
+// Connect MongoDB
 connectDB();
 
-app.use(cors({
-  origin: ["http://localhost:5173"],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+// CORS
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
-app.options(/.*/, cors());
+// Handle preflight requests
+app.options("*", cors());
+
+// Middleware
 app.use(express.json());
 
+// Routes
 app.use("/api/customers", customerRoutes);
 app.use("/api/quotations", quotationRoutes);
 
+// Test route
 app.get("/", (req, res) => {
   res.send("Quotation API Running");
 });
 
+// Local only
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== "production") {
@@ -35,4 +45,5 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
+// Export for Vercel
 module.exports = app;
