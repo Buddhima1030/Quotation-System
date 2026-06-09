@@ -12,10 +12,12 @@ const app = express();
 connectDB();
 
 app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  origin: ["http://localhost:5173"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
+app.options(/.*/, cors());
 app.use(express.json());
 
 app.use("/api/customers", customerRoutes);
