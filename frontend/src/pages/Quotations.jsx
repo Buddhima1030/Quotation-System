@@ -18,11 +18,9 @@ function Quotations() {
 
   const deleteQuotation = async (id) => {
     const confirmDelete = confirm("Delete this quotation?");
-
     if (!confirmDelete) return;
 
     await API.delete(`/quotations/${id}`);
-
     loadQuotations();
   };
 
@@ -65,12 +63,18 @@ function Quotations() {
                   <td className="p-4">{q.quotationNo}</td>
                   <td>{q.customer?.name}</td>
                   <td>{new Date(q.date).toLocaleDateString()}</td>
-                  <td>Rs. {q.totalAmount}</td>
+                  <td>Rs. {Number(q.totalAmount || 0).toFixed(2)}</td>
 
                   <td className="space-x-2">
                     <Link to={`/quotation/${q._id}`}>
                       <button className="bg-blue-700 text-white px-3 py-2 rounded">
                         View
+                      </button>
+                    </Link>
+
+                    <Link to={`/edit-quotation/${q._id}`}>
+                      <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded">
+                        Edit
                       </button>
                     </Link>
 

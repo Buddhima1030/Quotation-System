@@ -8,8 +8,9 @@ const BRANDS = [
   "/brands/hp.png",
   "/brands/dell.png",
   "/brands/acer.png",
-  "/brands/prolink.png",
   "/brands/asus.png",
+  "/brands/verbatim.jpg",
+  "/brands/prolink.png",
   "/brands/msi.jpg",
   "/brands/canon.png",
 ];
@@ -226,7 +227,7 @@ function ViewQuotations() {
                       </td>
 
                       <td className="border border-slate-300 px-2 py-1.5 text-right text-slate-700">
-                        {Number(item.price || 0).toLocaleString()}
+                        {Number(item.price || 0).toFixed(2)}
                       </td>
 
                       <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700">
@@ -262,7 +263,7 @@ function ViewQuotations() {
                     </td>
 
                     <td className="border border-slate-900 px-3 py-2 text-right text-sm font-bold text-white">
-                      Rs. {formatCurrency(quotation.totalAmount)}
+                      LKR {formatCurrency(quotation.totalAmount)}
                     </td>
                   </tr>
                 </tbody>

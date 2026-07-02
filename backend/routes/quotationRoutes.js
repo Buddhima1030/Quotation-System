@@ -26,7 +26,6 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const count = await Quotation.countDocuments();
-
     const quotationNo = "QT-" + String(count + 1).padStart(4, "0");
 
     const quotation = await Quotation.create({
@@ -39,6 +38,26 @@ router.post("/", async (req, res) => {
     });
 
     res.status(201).json(quotation);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put("/:id", async (req, res) => {
+  try {
+    const updatedQuotation = await Quotation.findByIdAndUpdate(
+      req.params.id,
+      {
+        customer: req.body.customer,
+        date: req.body.date,
+        items: req.body.items,
+        totalAmount: req.body.totalAmount,
+        notes: req.body.notes,
+      },
+      { new: true }
+    );
+
+    res.json(updatedQuotation);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

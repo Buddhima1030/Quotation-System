@@ -13,6 +13,7 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/create-quotation" element={<CreateQuotations />} />
+        <Route path="/edit-quotation/:id" element={<CreateQuotations />} />
         <Route path="/quotations" element={<Quotations />} />
         <Route path="/quotation/:id" element={<ViewQuotations />} />
       </Routes>
