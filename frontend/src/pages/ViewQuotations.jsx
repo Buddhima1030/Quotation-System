@@ -41,9 +41,7 @@ function ViewQuotations() {
         <Sidebar />
 
         <main className="flex-1 p-8">
-          <div className="font-medium text-slate-500">
-            Loading quotation...
-          </div>
+          <div className="font-medium text-slate-500">Loading quotation...</div>
         </main>
       </div>
     );
@@ -87,7 +85,7 @@ function ViewQuotations() {
         <div
           id="print-area"
           className="relative mx-auto overflow-hidden rounded-lg bg-white font-sans shadow-2xl"
-          style={{ width: "210mm", minHeight: "297mm" }}
+          style={{ width: "210mm", minHeight: "297mm", paddingTop: "22mm" }}
         >
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.03]">
             <img src={KH_LOGO} alt="" className="w-80 object-contain" />
@@ -95,26 +93,29 @@ function ViewQuotations() {
 
           <div className="relative z-10">
             <div className="quotation-header bg-slate-900 px-7 py-4 text-white">
-              <div className="flex items-center justify-between gap-6">
-                <div className="flex items-center gap-4">
+              <div className="relative flex items-center justify-center">
+                {/* Logo */}
+                <div className="absolute left-0 flex items-center gap-4">
                   <img
                     src={KH_LOGO}
                     alt="KH Technologies"
                     className="h-12 w-auto max-w-[120px] object-contain"
                   />
-
-                  <div>
-                    <h1 className="text-3xl font-extrabold leading-tight tracking-wider text-white">
-                      KH TECHNOLOGIES
-                    </h1>
-
-                    <p className="mt-1 text-xs font-medium tracking-wide text-slate-300">
-                      Total Computer Solutions
-                    </p>
-                  </div>
                 </div>
 
-                <div className="text-right">
+                {/* Center Heading */}
+                <div className="text-center">
+                  <h1 className="text-3xl font-extrabold tracking-wider text-white">
+                    KH TECHNOLOGIES
+                  </h1>
+
+                  <p className="mt-1 text-xs font-medium tracking-wide text-slate-300">
+                    Total Computer Solutions
+                  </p>
+                </div>
+
+                {/* Right Side */}
+                <div className="absolute right-0 text-right">
                   <p className="text-lg font-bold tracking-[0.25em] text-white">
                     QUOTATION
                   </p>
@@ -132,9 +133,13 @@ function ViewQuotations() {
                 Printers | UPS | LED Monitors
               </p>
 
-              <p className="mt-0.5 text-[11px] text-slate-600">
-                Desktop Computers | Laptops | LED Monitor Repairs | Computer
+              <p className="mt-0.5 text-[11px] text-slate-600 font-bold">
+                Desktop Computers | Laptops & Macbooks| LED Monitors | Computer
                 Accessories & Maintenance
+              </p>
+
+              <p className="mt-0.5 text-[11px] text-slate-600 font-bold">
+                Laptop Desktop Repairs | Monitor Repairs | Printer Repairs | Smart TV Repairs | CCTV Camera Systems
               </p>
             </div>
 
@@ -144,7 +149,7 @@ function ViewQuotations() {
                   <p className="font-semibold text-slate-900">
                     KH Technologies
                   </p>
-                  <p>Registered No - WH6104</p>
+                  <p>Registered No - WH6104 (as a Company Since 2006)</p>
                   <p># 27, Holy Emmanuel Church Road, Idama, Moratuwa</p>
                   <p>Direct: 011-2644185 | 071 4497548</p>
                   <p>E-mail: khtechnologies123@gmail.com</p>
@@ -153,9 +158,7 @@ function ViewQuotations() {
                 <div className="flex justify-end">
                   <div className="min-w-[220px] rounded-lg border border-slate-300 bg-white p-3">
                     <div className="flex justify-between gap-4">
-                      <span className="font-semibold text-slate-700">
-                        Date
-                      </span>
+                      <span className="font-semibold text-slate-700">Date</span>
 
                       <span className="text-right text-slate-900">
                         {formattedDate}
@@ -185,6 +188,10 @@ function ViewQuotations() {
                 </p>
 
                 <p className="mt-1 text-slate-800">
+                  <strong>Phone:</strong> {quotation.customer?.phone || "N/A"}
+                </p>
+
+                <p className="mt-1 text-slate-800">
                   <strong>Address:</strong>{" "}
                   {quotation.customer?.address || "N/A"}
                 </p>
@@ -194,23 +201,23 @@ function ViewQuotations() {
                 <thead>
                   <tr className="table-head bg-slate-800 text-white">
                     <th className="w-[45%] border border-slate-700 px-2 py-1.5 text-left font-bold text-white">
-                      Description
+                      DESCRIPTION
                     </th>
 
                     <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white">
-                      Warranty
+                      WARRANTY
                     </th>
 
                     <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white">
-                      Unit Price
+                      UNIT PRICE
                     </th>
 
                     <th className="w-[10%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white">
-                      Qty
+                      QTY
                     </th>
 
                     <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white">
-                      Amount - LKR
+                      AMOUNT - LKR
                     </th>
                   </tr>
                 </thead>
@@ -236,7 +243,7 @@ function ViewQuotations() {
 
                       <td className="border border-slate-300 px-2 py-1.5 text-right font-semibold text-slate-900">
                         {formatCurrency(
-                          Number(item.quantity || 0) * Number(item.price || 0)
+                          Number(item.quantity || 0) * Number(item.price || 0),
                         )}
                       </td>
                     </tr>
@@ -287,6 +294,10 @@ function ViewQuotations() {
 
                 <p className="mt-1">
                   <strong>Payment:</strong> Cash / Bank Transfer
+                </p>
+
+                <p className="mt-1 text-red-700 font-bold">
+                NO WARRANTY CLAIMS WILL BE ACCEPTED FOR BURN MARKS, PHYSICAL DAMAGES AND CORROSION.
                 </p>
               </div>
 
