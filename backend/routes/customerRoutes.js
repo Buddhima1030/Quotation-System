@@ -35,4 +35,23 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.put("/:id", async (req, res) => {
+  try {
+    const customer = await Customer.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: req.body.name,
+        phone: req.body.phone,
+        email: req.body.email,
+        address: req.body.address,
+      },
+      { new: true }
+    );
+
+    res.json(customer);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;

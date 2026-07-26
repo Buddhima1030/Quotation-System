@@ -4,6 +4,7 @@ import Sidebar from "../components/Sidebar";
 
 function Customers() {
   const [customers, setCustomers] = useState([]);
+  const [editingId, setEditingId] = useState(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -40,6 +41,22 @@ function Customers() {
 
     loadCustomers();
   };
+
+  const editCustomer = (customer) => {
+  setEditingId(customer._id);
+
+  setForm({
+    name: customer.name,
+    phone: customer.phone,
+    email: customer.email,
+    address: customer.address,
+  });
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth",
+  });
+};
 
   const handleChange = (e) => {
     setForm({
@@ -92,9 +109,13 @@ function Customers() {
     if (!validate()) return;
 
     try {
-      await API.post("/customers", form);
-
-      alert("Customer saved successfully");
+      if (editingId) {
+  await API.put(`/customers/${editingId}`, form);
+  alert("Customer updated successfully");
+} else {
+  await API.post("/customers", form);
+  alert("Customer saved successfully");
+}
 
       setForm({
         name: "",
@@ -176,11 +197,11 @@ function Customers() {
           />
 
           <button
-            type="submit"
-            className="bg-blue-700 hover:bg-blue-800 text-white p-3 rounded col-span-2"
-          >
-            Save Customer
-          </button>
+  type="submit"
+  className="bg-blue-700 hover:bg-blue-800 text-white p-3 rounded col-span-2"
+>
+  {editingId ? "Update Customer" : "Save Customer"}
+</button>
         </form>
 
         <table className="w-full bg-white rounded-xl shadow overflow-hidden">
@@ -202,14 +223,21 @@ function Customers() {
                 <td className="p-3">{customer.email}</td>
                 <td className="p-3">{customer.address}</td>
 
-                <td className="p-3">
-                  <button
-                    onClick={() => deleteCustomer(customer._id)}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
-                  >
-                    Delete
-                  </button>
-                </td>
+                <td className="p-3 flex gap-2">
+  <button
+    onClick={() => editCustomer(customer)}
+    className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded"
+  >
+    Edit
+  </button>
+
+  <button
+    onClick={() => deleteCustomer(customer._id)}
+    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+  >
+    Delete
+  </button>
+</td>
               </tr>
             ))}
           </tbody>

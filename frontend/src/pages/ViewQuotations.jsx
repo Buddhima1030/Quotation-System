@@ -344,7 +344,7 @@ function ViewQuotations() {
           @media print {
             @page {
               size: A4;
-              margin: 0;
+              margin: 15mm 10mm 10mm 10mm;
             }
 
             html,
@@ -370,12 +370,12 @@ function ViewQuotations() {
 
             #print-area {
               position: absolute !important;
-              top: 0 !important;
+              top: 15mm !important;
               left: 0 !important;
               width: 210mm !important;
-              height: 297mm !important;
-              min-height: 297mm !important;
-              max-height: 297mm !important;
+              height: 282mm !important;
+              min-height: 282mm !important;
+              max-height: 282mm !important;
               margin: 0 !important;
               padding: 0 !important;
               box-shadow: none !important;
