@@ -8,22 +8,48 @@ function Sidebar() {
       </h1>
 
       <nav className="space-y-3">
-        <Link className="block p-3 rounded hover:bg-slate-700" to="/">
-          Dashboard
-        </Link>
+  <Link
+    className="block p-3 rounded hover:bg-slate-700"
+    to="/"
+  >
+    Dashboard
+  </Link>
 
-        <Link className="block p-3 rounded hover:bg-slate-700" to="/customers">
-          Customers
-        </Link>
+  <Link
+    className="block p-3 rounded hover:bg-slate-700"
+    to="/customers"
+  >
+    Customers
+  </Link>
 
-        <Link className="block p-3 rounded hover:bg-slate-700" to="/create-quotation">
-          Create Quotation
-        </Link>
+  <Link
+    className="block p-3 rounded hover:bg-slate-700"
+    to="/create-quotation"
+  >
+    Create Quotation
+  </Link>
 
-        <Link className="block p-3 rounded hover:bg-slate-700" to="/quotations">
-          Past Quotations
-        </Link>
-      </nav>
+  <Link
+    className="block p-3 rounded hover:bg-slate-700"
+    to="/quotations"
+  >
+    Past Quotations
+  </Link>
+
+  {/* <Link
+    className="block p-3 rounded hover:bg-slate-700"
+    to="/create-outstanding"
+  >
+    Create Outstanding
+  </Link> */}
+
+  <Link
+    className="block p-3 rounded hover:bg-slate-700"
+    to="/outstanding-customers"
+  >
+    Outstanding Customers
+  </Link>
+</nav>
     </div>
   );
 }

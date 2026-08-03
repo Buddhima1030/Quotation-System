@@ -5,6 +5,7 @@ const connectDB = require("./db");
 
 const customerRoutes = require("./routes/customerRoutes");
 const quotationRoutes = require("./routes/quotationRoutes");
+const outstandingRoutes = require("./routes/outstandingRoutes");
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use(express.json());
 
 app.use("/api/customers", customerRoutes);
 app.use("/api/quotations", quotationRoutes);
+app.use("/api/outstanding", outstandingRoutes);
 
 app.get("/", (req, res) => {
   res.send("Quotation API Running");
