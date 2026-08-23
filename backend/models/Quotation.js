@@ -17,6 +17,7 @@ const quotationSchema = new mongoose.Schema(
         itemName: String,
         quantity: Number,
         price: Number,
+        amount: Number,
         warranty: String,
       },
     ],

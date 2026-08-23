@@ -27,11 +27,22 @@ function ViewQuotations() {
 
   const loadQuotation = async () => {
     try {
-      const res = await API.get("/quotations");
-      const selected = res.data.find((q) => q._id === id);
-      setQuotation(selected);
+      const res = await API.get(`/quotations/${id}`);
+      if (res.data) {
+        setQuotation(res.data);
+      } else {
+        const allRes = await API.get("/quotations");
+        const selected = allRes.data.find((q) => q._id === id);
+        setQuotation(selected);
+      }
     } catch (error) {
-      console.error("Failed to load quotation:", error);
+      try {
+        const allRes = await API.get("/quotations");
+        const selected = allRes.data.find((q) => q._id === id);
+        setQuotation(selected);
+      } catch (err) {
+        console.error("Failed to load quotation:", err);
+      }
     }
   };
 
@@ -60,6 +71,36 @@ function ViewQuotations() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+
+  const getItemAmount = (item) => {
+    if (
+      item.amount !== undefined &&
+      item.amount !== null &&
+      item.amount !== "" &&
+      Number(item.amount) !== 0
+    ) {
+      return Number(item.amount);
+    }
+    if (
+      item.price !== undefined &&
+      item.price !== null &&
+      item.price !== "" &&
+      Number(item.price) !== 0
+    ) {
+      return Number(item.quantity || 1) * Number(item.price);
+    }
+    if (quotation?.totalAmount && quotation.items?.length > 0) {
+      const itemsWithKnownAmount = quotation.items.filter(
+        (i) =>
+          (i.amount && Number(i.amount) > 0) ||
+          (i.price && Number(i.price) > 0),
+      );
+      if (itemsWithKnownAmount.length === 0) {
+        return Number(quotation.totalAmount) / quotation.items.length;
+      }
+    }
+    return 0;
+  };
 
   return (
     <div className="flex min-h-screen bg-slate-100">
@@ -234,7 +275,12 @@ function ViewQuotations() {
                       </td>
 
                       <td className="border border-slate-300 px-2 py-1.5 text-right text-slate-700">
-                        {Number(item.price || 0).toFixed(2)}
+                        {item.price !== null &&
+                        item.price !== undefined &&
+                        item.price !== "" &&
+                        Number(item.price) > 0
+                          ? Number(item.price).toFixed(2)
+                          : ""}
                       </td>
 
                       <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700">
@@ -242,9 +288,9 @@ function ViewQuotations() {
                       </td>
 
                       <td className="border border-slate-300 px-2 py-1.5 text-right font-semibold text-slate-900">
-                        {formatCurrency(
-                          Number(item.quantity || 0) * Number(item.price || 0),
-                        )}
+                        {getItemAmount(item) > 0
+                          ? formatCurrency(getItemAmount(item))
+                          : ""}
                       </td>
                     </tr>
                   ))}

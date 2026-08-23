@@ -16,16 +16,8 @@ function CreateQuotations() {
     customerName: "",
     date: getToday(),
     notes: "",
-    items: [{ itemName: "", quantity: 1, price: "0.00", warranty: "" }],
+    items: [{ itemName: "", quantity: 1, price: "", amount: "", warranty: "" }],
   });
-
-  useEffect(() => {
-    loadCustomers();
-
-    if (id) {
-      loadQuotation();
-    }
-  }, [id]);
 
   const loadCustomers = async () => {
     const res = await API.get("/customers");
@@ -44,16 +36,63 @@ function CreateQuotations() {
       customerName: res.data.customer?.name || "",
       date: res.data.date?.split("T")[0] || getToday(),
       notes: res.data.notes || "",
-      items: res.data.items?.map((item) => ({
-        ...item,
-        price: Number(item.price || 0).toFixed(2),
-      })) || [{ itemName: "", quantity: 1, price: "0.00", warranty: "" }],
+      items: res.data.items?.map((item) => {
+        const hasUnitPrice =
+          item.price !== undefined &&
+          item.price !== null &&
+          item.price !== 0 &&
+          item.price !== "";
+        const hasAmount =
+          item.amount !== undefined &&
+          item.amount !== null &&
+          item.amount !== 0 &&
+          item.amount !== "";
+
+        const priceStr = hasUnitPrice ? Number(item.price).toFixed(2) : "";
+        const amountStr = hasAmount
+          ? Number(item.amount).toFixed(2)
+          : hasUnitPrice
+            ? (Number(item.quantity || 1) * Number(item.price)).toFixed(2)
+            : "";
+
+        return {
+          itemName: item.itemName || "",
+          quantity: item.quantity ?? 1,
+          price: priceStr,
+          amount: amountStr,
+          warranty: item.warranty || "",
+        };
+      }) || [{ itemName: "", quantity: 1, price: "", amount: "", warranty: "" }],
     });
   };
 
+  useEffect(() => {
+    loadCustomers();
+
+    if (id) {
+      loadQuotation();
+    }
+  }, [id]);
+
   const updateItem = (index, field, value) => {
     const newItems = [...form.items];
-    newItems[index][field] = value;
+    const currentItem = { ...newItems[index], [field]: value };
+
+    if (field === "quantity") {
+      const qty = Number(value);
+      const pr = Number(currentItem.price);
+      if (currentItem.price !== "" && !isNaN(pr) && !isNaN(qty)) {
+        currentItem.amount = (qty * pr).toFixed(2);
+      }
+    } else if (field === "price") {
+      const pr = Number(value);
+      const qty = Number(currentItem.quantity || 1);
+      if (value !== "" && !isNaN(pr) && !isNaN(qty)) {
+        currentItem.amount = (qty * pr).toFixed(2);
+      }
+    }
+
+    newItems[index] = currentItem;
     setForm({ ...form, items: newItems });
   };
 
@@ -62,7 +101,7 @@ function CreateQuotations() {
       ...form,
       items: [
         ...form.items,
-        { itemName: "", quantity: 1, price: "0.00", warranty: "" },
+        { itemName: "", quantity: 1, price: "", amount: "", warranty: "" },
       ],
     });
   };
@@ -75,7 +114,14 @@ function CreateQuotations() {
   };
 
   const totalAmount = form.items.reduce((total, item) => {
-    return total + Number(item.quantity) * Number(item.price);
+    const itemAmount =
+      item.amount !== "" &&
+      item.amount !== undefined &&
+      item.amount !== null &&
+      !isNaN(Number(item.amount))
+        ? Number(item.amount)
+        : Number(item.quantity || 0) * Number(item.price || 0);
+    return total + (isNaN(itemAmount) ? 0 : itemAmount);
   }, 0);
 
   const saveQuotation = async (e) => {
@@ -106,7 +152,32 @@ function CreateQuotations() {
       customer: selectedCustomer._id,
       date: form.date,
       notes: form.notes,
-      items: form.items,
+      items: form.items.map((item) => {
+        const unitPrice =
+          item.price !== "" &&
+          item.price !== undefined &&
+          item.price !== null &&
+          !isNaN(Number(item.price))
+            ? Number(item.price)
+            : null;
+        const itemAmount =
+          item.amount !== "" &&
+          item.amount !== undefined &&
+          item.amount !== null &&
+          !isNaN(Number(item.amount))
+            ? Number(item.amount)
+            : unitPrice !== null
+              ? (Number(item.quantity) || 1) * unitPrice
+              : 0;
+
+        return {
+          itemName: item.itemName,
+          quantity: Number(item.quantity) || 1,
+          price: unitPrice,
+          amount: itemAmount,
+          warranty: item.warranty,
+        };
+      }),
       totalAmount,
     };
 
@@ -125,7 +196,7 @@ function CreateQuotations() {
       customerName: "",
       date: getToday(),
       notes: "",
-      items: [{ itemName: "", quantity: 1, price: "0.00", warranty: "" }],
+      items: [{ itemName: "", quantity: 1, price: "", amount: "", warranty: "" }],
     });
 
     loadCustomers();
@@ -189,8 +260,17 @@ function CreateQuotations() {
 
           <h2 className="text-xl font-bold">Items</h2>
 
+          <div className="grid grid-cols-6 gap-3 text-xs font-semibold text-slate-600 uppercase px-1">
+            <span>Item Name</span>
+            <span>Qty</span>
+            <span>Unit Price</span>
+            <span>Amount</span>
+            <span>Warranty</span>
+            <span>Action</span>
+          </div>
+
           {form.items.map((item, index) => (
-            <div key={index} className="grid grid-cols-5 gap-3">
+            <div key={index} className="grid grid-cols-6 gap-3">
               <input
                 className="border p-3 rounded"
                 placeholder="Item name"
@@ -210,38 +290,63 @@ function CreateQuotations() {
                 className="border p-3 rounded"
                 type="number"
                 step="0.01"
-                placeholder="Price"
+                placeholder="Unit Price"
                 value={item.price}
                 onChange={(e) => updateItem(index, "price", e.target.value)}
-                onBlur={(e) =>
-                  updateItem(
-                    index,
-                    "price",
-                    Number(e.target.value || 0).toFixed(2),
-                  )
-                }
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val !== "" && !isNaN(Number(val))) {
+                    updateItem(
+                      index,
+                      "price",
+                      Number(val).toFixed(2),
+                    );
+                  }
+                }}
+              />
+
+              <input
+                className="border p-3 rounded"
+                type="number"
+                step="0.01"
+                placeholder="Amount"
+                value={item.amount}
+                onChange={(e) => updateItem(index, "amount", e.target.value)}
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val !== "" && !isNaN(Number(val))) {
+                    updateItem(
+                      index,
+                      "amount",
+                      Number(val).toFixed(2),
+                    );
+                  }
+                }}
               />
 
               <input
                 list={`warranty-list-${index}`}
                 className="border p-3 rounded"
-                placeholder="Select or type warranty"
+                placeholder="Warranty"
                 value={item.warranty}
                 onChange={(e) => updateItem(index, "warranty", e.target.value)}
               />
 
               <datalist id={`warranty-list-${index}`}>
                 <option value="NO WARRANTY" />
+                <option value="1 MONTH" />
+                <option value="2 MONTHS" />
                 <option value="3 MONTHS" />
                 <option value="6 MONTHS" />
                 <option value="1 YEAR" />
-                <option value="2 YEAR" />
+                <option value="2 YEARS" />
+                <option value="3 YEARS" />
               </datalist>
 
               <button
                 type="button"
                 onClick={() => removeItem(index)}
-                className="bg-red-600 text-white rounded"
+                className="bg-red-600 text-white rounded p-3"
               >
                 Delete
               </button>
