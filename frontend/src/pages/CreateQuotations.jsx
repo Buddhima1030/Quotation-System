@@ -260,26 +260,26 @@ function CreateQuotations() {
 
           <h2 className="text-xl font-bold">Items</h2>
 
-          <div className="grid grid-cols-6 gap-3 text-xs font-semibold text-slate-600 uppercase px-1">
-            <span>Item Name</span>
-            <span>Qty</span>
-            <span>Unit Price</span>
-            <span>Amount</span>
-            <span>Warranty</span>
-            <span>Action</span>
+          <div className="grid grid-cols-12 gap-3 text-xs font-semibold text-slate-600 uppercase px-1">
+            <span className="col-span-4">Item Name</span>
+            <span className="col-span-1">Qty</span>
+            <span className="col-span-2">Unit Price</span>
+            <span className="col-span-2">Amount</span>
+            <span className="col-span-2">Warranty</span>
+            <span className="col-span-1">Action</span>
           </div>
 
           {form.items.map((item, index) => (
-            <div key={index} className="grid grid-cols-6 gap-3">
+            <div key={index} className="grid grid-cols-12 gap-3">
               <input
-                className="border p-3 rounded"
+                className="col-span-4 border p-3 rounded"
                 placeholder="Item name"
                 value={item.itemName}
                 onChange={(e) => updateItem(index, "itemName", e.target.value)}
               />
 
               <input
-                className="border p-3 rounded"
+                className="col-span-1 border p-3 rounded"
                 type="number"
                 placeholder="Qty"
                 value={item.quantity}
@@ -287,7 +287,7 @@ function CreateQuotations() {
               />
 
               <input
-                className="border p-3 rounded"
+                className="col-span-2 border p-3 rounded"
                 type="number"
                 step="0.01"
                 placeholder="Unit Price"
@@ -306,7 +306,7 @@ function CreateQuotations() {
               />
 
               <input
-                className="border p-3 rounded"
+                className="col-span-2 border p-3 rounded"
                 type="number"
                 step="0.01"
                 placeholder="Amount"
@@ -326,7 +326,7 @@ function CreateQuotations() {
 
               <input
                 list={`warranty-list-${index}`}
-                className="border p-3 rounded"
+                className="col-span-2 border p-3 rounded"
                 placeholder="Warranty"
                 value={item.warranty}
                 onChange={(e) => updateItem(index, "warranty", e.target.value)}
@@ -334,6 +334,7 @@ function CreateQuotations() {
 
               <datalist id={`warranty-list-${index}`}>
                 <option value="NO WARRANTY" />
+                <option value="FREE ITEM" />
                 <option value="1 MONTH" />
                 <option value="2 MONTHS" />
                 <option value="3 MONTHS" />
@@ -346,7 +347,7 @@ function CreateQuotations() {
               <button
                 type="button"
                 onClick={() => removeItem(index)}
-                className="bg-red-600 text-white rounded p-3"
+                className="col-span-1 bg-red-600 hover:bg-red-700 text-white rounded p-3"
               >
                 Delete
               </button>
@@ -362,7 +363,7 @@ function CreateQuotations() {
           </button>
 
           <h2 className="text-2xl font-bold text-blue-700">
-            Total: Rs. {totalAmount.toFixed(2)}
+            Total: Rs. {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </h2>
 
           <button

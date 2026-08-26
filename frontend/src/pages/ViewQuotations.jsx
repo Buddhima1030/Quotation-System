@@ -66,6 +66,13 @@ function ViewQuotations() {
 
   const fillerRows = Math.max(0, 5 - quotation.items.length);
 
+  const formatQuotationNo = (no) => {
+    if (!no) return "";
+    if (/^QT-26-/i.test(no)) return no;
+    if (/^QT-/i.test(no)) return no.replace(/^QT-/i, "QT-26-");
+    return `QT-26-${no}`;
+  };
+
   const formatCurrency = (value) =>
     Number(value || 0).toLocaleString("en-US", {
       minimumFractionDigits: 2,
@@ -136,21 +143,23 @@ function ViewQuotations() {
             <div className="quotation-header bg-slate-900 px-7 py-4 text-white">
               <div className="relative flex items-center justify-center">
                 {/* Logo */}
-                <div className="absolute left-0 flex items-center gap-4">
-                  <img
-                    src={KH_LOGO}
-                    alt="KH Technologies"
-                    className="h-12 w-auto max-w-[120px] object-contain"
-                  />
+                <div className="absolute left-0 flex items-center">
+                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-md bg-white p-0.5 shadow-sm">
+                    <img
+                      src={KH_LOGO}
+                      alt="KH Technologies"
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
                 </div>
 
                 {/* Center Heading */}
                 <div className="text-center">
-                  <h1 className="text-3xl font-extrabold tracking-wider text-white">
+                  <h1 className="text-4xl font-extrabold tracking-wider text-white">
                     KH TECHNOLOGIES
                   </h1>
 
-                  <p className="mt-1 text-xs font-medium tracking-wide text-slate-300">
+                  <p className="mt-1 text-s font-medium tracking-wide text-slate-300">
                     Total Computer Solutions
                   </p>
                 </div>
@@ -169,30 +178,32 @@ function ViewQuotations() {
             </div>
 
             <div className="service-strip border-b border-slate-200 bg-slate-100 px-7 py-2">
-              <p className="text-[11px] font-semibold text-slate-700">
+              <p className="text-[14px] font-semibold text-slate-700">
                 Suppliers of Brand New Computers | Laptops & Accessories |
                 Printers | UPS | LED Monitors
               </p>
 
-              <p className="mt-0.5 text-[11px] text-slate-600 font-bold">
+              <p className="mt-0.5 text-[14px] text-slate-600 font-bold">
                 Desktop Computers | Laptops & Macbooks| LED Monitors | Computer
                 Accessories & Maintenance
               </p>
 
-              <p className="mt-0.5 text-[11px] text-slate-600 font-bold">
+
+
+              <p className="mt-0.5 text-[14px] text-slate-600 font-bold">
                 Laptop Desktop Repairs | Monitor Repairs | Printer Repairs | Smart TV Repairs | CCTV Camera Systems
               </p>
             </div>
 
             <div className="px-7 pt-4 pb-4">
-              <div className="mb-4 grid grid-cols-2 gap-6 text-[11px] leading-relaxed text-slate-700">
+              <div className="mb-4 grid grid-cols-2 gap-6 text-[12px] leading-relaxed text-slate-700">
                 <div>
                   <p className="font-semibold text-slate-900">
                     KH Technologies
                   </p>
                   <p>Registered No - WH6104 (as a Company Since 2006)</p>
                   <p># 27, Holy Emmanuel Church Road, Idama, Moratuwa</p>
-                  <p>Direct: 011-2644185 | 071 4497548</p>
+                  <p>Direct: 011-2644185 | 071 4497548 | 0712190976</p>
                   <p>E-mail: khtechnologies123@gmail.com</p>
                 </div>
 
@@ -212,7 +223,7 @@ function ViewQuotations() {
                       </span>
 
                       <span className="text-right font-semibold text-slate-900">
-                        {quotation.quotationNo}
+                        {formatQuotationNo(quotation.quotationNo)}
                       </span>
                     </div>
                   </div>
@@ -225,7 +236,7 @@ function ViewQuotations() {
                 </p>
 
                 <p className="text-slate-800">
-                  <strong>Name:</strong> {quotation.customer?.name || "N/A"}
+                  <strong>Dear Sir/Madam</strong> {quotation.customer?.name || "N/A"}
                 </p>
 
                 <p className="mt-1 text-slate-800">
@@ -241,23 +252,23 @@ function ViewQuotations() {
               <table className="quotation-table w-full border-collapse border border-slate-400 text-xs">
                 <thead>
                   <tr className="table-head bg-slate-800 text-white">
-                    <th className="w-[45%] border border-slate-700 px-2 py-1.5 text-left font-bold text-white">
+                    <th className="w-[48%] border border-slate-700 px-2 py-1.5 text-left font-bold text-white">
                       DESCRIPTION
                     </th>
 
-                    <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white">
+                    <th className="w-[18%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       WARRANTY
                     </th>
 
-                    <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white">
+                    <th className="w-[14%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">
                       UNIT PRICE
                     </th>
 
-                    <th className="w-[10%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white">
+                    <th className="w-[6%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       QTY
                     </th>
 
-                    <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white">
+                    <th className="w-[14%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">
                       AMOUNT - LKR
                     </th>
                   </tr>
@@ -270,24 +281,24 @@ function ViewQuotations() {
                         {item.itemName}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700">
+                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 whitespace-nowrap">
                         {item.warranty}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-right text-slate-700">
+                      <td className="border border-slate-300 px-2 py-1.5 text-right text-slate-700 whitespace-nowrap">
                         {item.price !== null &&
                         item.price !== undefined &&
                         item.price !== "" &&
                         Number(item.price) > 0
-                          ? Number(item.price).toFixed(2)
+                          ? formatCurrency(item.price)
                           : ""}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700">
+                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 whitespace-nowrap">
                         {String(item.quantity || 0).padStart(2, "0")}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-right font-semibold text-slate-900">
+                      <td className="border border-slate-300 px-2 py-1.5 text-right font-semibold text-slate-900 whitespace-nowrap">
                         {getItemAmount(item) > 0
                           ? formatCurrency(getItemAmount(item))
                           : ""}
