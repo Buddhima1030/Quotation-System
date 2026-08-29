@@ -24,6 +24,7 @@ const quotationSchema = new mongoose.Schema(
 
     totalAmount: Number,
     notes: String,
+    subject: String,
   },
   { timestamps: true }
 );

@@ -74,6 +74,7 @@ router.post("/", async (req, res) => {
       items: req.body.items,
       totalAmount: req.body.totalAmount,
       notes: req.body.notes,
+      subject: req.body.subject,
     });
 
     res.status(201).json(quotation);
@@ -98,6 +99,7 @@ router.post("/:id/copy", async (req, res) => {
       items: original.items,
       totalAmount: original.totalAmount,
       notes: original.notes,
+      subject: original.subject,
     });
 
     const populated = await Quotation.findById(quotation._id).populate("customer");
@@ -117,6 +119,7 @@ router.put("/:id", async (req, res) => {
         items: req.body.items,
         totalAmount: req.body.totalAmount,
         notes: req.body.notes,
+        subject: req.body.subject,
       },
       { new: true }
     );

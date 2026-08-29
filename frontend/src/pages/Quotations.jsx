@@ -53,6 +53,7 @@ function Quotations() {
 
       const quotationData = {
         customer: customerId,
+        subject: original.subject || "",
         date: new Date().toISOString().split("T")[0],
         notes: original.notes || "",
         items: (original.items || []).map((item) => ({

@@ -14,6 +14,7 @@ function CreateQuotations() {
 
   const [form, setForm] = useState({
     customerName: "",
+    subject: "",
     date: getToday(),
     notes: "",
     items: [{ itemName: "", quantity: 1, price: "", amount: "", warranty: "" }],
@@ -34,6 +35,7 @@ function CreateQuotations() {
 
     setForm({
       customerName: res.data.customer?.name || "",
+      subject: res.data.subject || "",
       date: res.data.date?.split("T")[0] || getToday(),
       notes: res.data.notes || "",
       items: res.data.items?.map((item) => {
@@ -150,6 +152,7 @@ function CreateQuotations() {
 
     const quotationData = {
       customer: selectedCustomer._id,
+      subject: form.subject || "",
       date: form.date,
       notes: form.notes,
       items: form.items.map((item) => {
@@ -194,6 +197,7 @@ function CreateQuotations() {
 
     setForm({
       customerName: "",
+      subject: "",
       date: getToday(),
       notes: "",
       items: [{ itemName: "", quantity: 1, price: "", amount: "", warranty: "" }],
@@ -250,6 +254,13 @@ function CreateQuotations() {
               onChange={(e) => setForm({ ...form, date: e.target.value })}
             />
           </div>
+
+          <input
+            className="border p-3 rounded w-full"
+            placeholder="Subject (Optional - e.g. Supply of Computer Accessories)"
+            value={form.subject}
+            onChange={(e) => setForm({ ...form, subject: e.target.value })}
+          />
 
           <textarea
             className="border p-3 rounded w-full"
@@ -334,7 +345,7 @@ function CreateQuotations() {
 
               <datalist id={`warranty-list-${index}`}>
                 <option value="NO WARRANTY" />
-                <option value="FREE ITEM" />
+                <option value="FREE" />
                 <option value="1 MONTH" />
                 <option value="2 MONTHS" />
                 <option value="3 MONTHS" />

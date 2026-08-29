@@ -39,7 +39,16 @@ const outstandingSchema = new mongoose.Schema(
       default: Date.now,
     },
 
+    invoiceDate: {
+      type: Date,
+    },
+
     items: [outstandingItemSchema],
+
+    amount: {
+      type: Number,
+      default: 0,
+    },
 
     totalAmount: {
       type: Number,
@@ -48,6 +57,11 @@ const outstandingSchema = new mongoose.Schema(
     },
 
     notes: {
+      type: String,
+      default: "",
+    },
+
+    description: {
       type: String,
       default: "",
     },

@@ -239,14 +239,22 @@ function ViewQuotations() {
                   <strong>Dear Sir/Madam</strong> {quotation.customer?.name || "N/A"}
                 </p>
 
-                <p className="mt-1 text-slate-800">
-                  <strong>Phone:</strong> {quotation.customer?.phone || "N/A"}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-6 text-slate-800">
+                  <p>
+                    <strong>Phone:</strong> {quotation.customer?.phone || "N/A"}
+                  </p>
 
-                <p className="mt-1 text-slate-800">
-                  <strong>Address:</strong>{" "}
-                  {quotation.customer?.address || "N/A"}
-                </p>
+                  <p>
+                    <strong>Address:</strong>{" "}
+                    {quotation.customer?.address || "N/A"}
+                  </p>
+                </div>
+
+                {quotation.subject && quotation.subject.trim() && (
+                  <p className="mt-1 text-slate-800">
+                    <strong>Subject:</strong> {quotation.subject}
+                  </p>
+                )}
               </div>
 
               <table className="quotation-table w-full border-collapse border border-slate-400 text-xs">
