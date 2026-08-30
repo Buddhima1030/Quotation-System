@@ -36,16 +36,17 @@ function CreateOutstanding() {
 
   const getToday = () => new Date().toISOString().split("T")[0];
 
-  const [customer, setCustomer] = useState(null);
-
-  const [form, setForm] = useState({
+  const emptyInvoice = () => ({
     invoiceNumber: "",
     date: getToday(),
-    invoiceDate: getToday(),
     status: "Pending",
+    invoiceDate: getToday(),
     amount: "",
     notes: "",
   });
+
+  const [customer, setCustomer] = useState(null);
+  const [invoices, setInvoices] = useState([emptyInvoice()]);
 
   useEffect(() => {
     if (isEdit) {
@@ -58,9 +59,7 @@ function CreateOutstanding() {
   const loadCustomer = async () => {
     try {
       const res = await API.get("/customers");
-
       const selected = res.data.find((c) => c._id === id);
-
       setCustomer(selected);
     } catch (err) {
       console.log(err);
@@ -78,54 +77,110 @@ function CreateOutstanding() {
           extractInvoiceDate(res.data) ||
           (res.data.date ? res.data.date.split("T")[0] : getToday());
 
-        setForm({
-          invoiceNumber: res.data.invoiceNumber || "",
-          date: res.data.date ? res.data.date.split("T")[0] : getToday(),
-          invoiceDate: parsedInvoiceDate,
-          status: res.data.status || "Pending",
-          amount:
-            res.data.amount !== undefined &&
-            res.data.amount !== null &&
-            res.data.amount !== 0
-              ? res.data.amount
-              : res.data.totalAmount !== undefined &&
-                res.data.totalAmount !== null
-              ? res.data.totalAmount
-              : "",
-          notes: cleanNotes(res.data.notes || res.data.description || ""),
-        });
+        setInvoices([
+          {
+            invoiceNumber: res.data.invoiceNumber || "",
+            date: res.data.date ? res.data.date.split("T")[0] : getToday(),
+            status: res.data.status || "Pending",
+            invoiceDate: parsedInvoiceDate,
+            amount:
+              res.data.amount !== undefined &&
+              res.data.amount !== null &&
+              res.data.amount !== 0
+                ? res.data.amount
+                : res.data.totalAmount !== undefined &&
+                  res.data.totalAmount !== null
+                ? res.data.totalAmount
+                : "",
+            notes: cleanNotes(res.data.notes || res.data.description || ""),
+          },
+        ]);
       }
     } catch (err) {
       console.log("Failed to load outstanding record:", err);
     }
   };
 
+  const addInvoice = () => {
+    setInvoices([...invoices, emptyInvoice()]);
+  };
+
+  const removeInvoice = (index) => {
+    if (invoices.length === 1) return;
+    setInvoices(invoices.filter((_, i) => i !== index));
+  };
+
+  const updateInvoice = (index, field, value) => {
+    const updated = [...invoices];
+    updated[index][field] = value;
+    setInvoices(updated);
+  };
+
+  const totalAmount = invoices.reduce(
+    (sum, inv) => sum + Number(inv.amount || 0),
+    0
+  );
+
   const saveOutstanding = async (e) => {
     e.preventDefault();
 
-    const numericAmount = Number(form.amount || 0);
     const customerId = customer?._id || id;
-    const packedNotes = packNotes(form.notes, form.invoiceDate);
 
-    const payload = {
-      customer: customerId,
-      invoiceNumber: form.invoiceNumber,
-      date: form.date,
-      invoiceDate: form.invoiceDate,
-      amount: numericAmount,
-      totalAmount: numericAmount,
-      status: form.status,
-      notes: packedNotes,
-    };
+    // Validate that invoice numbers and amounts are present
+    for (let i = 0; i < invoices.length; i++) {
+      if (!invoices[i].invoiceNumber.trim()) {
+        alert(`Please enter an Invoice Number for invoice #${i + 1}`);
+        return;
+      }
+      if (invoices[i].amount === "" || isNaN(Number(invoices[i].amount))) {
+        alert(`Please enter a valid Amount for invoice #${i + 1}`);
+        return;
+      }
+    }
 
     try {
       if (isEdit) {
-        await API.put(`/outstanding/${id}`, payload);
+        const inv = invoices[0];
+        const numericAmount = Number(inv.amount || 0);
+        const packedNotes = packNotes(inv.notes, inv.invoiceDate);
+
+        await API.put(`/outstanding/${id}`, {
+          customer: customerId,
+          invoiceNumber: inv.invoiceNumber,
+          date: inv.date,
+          invoiceDate: inv.invoiceDate,
+          amount: numericAmount,
+          totalAmount: numericAmount,
+          status: inv.status,
+          notes: packedNotes,
+        });
+
         alert("Outstanding record updated successfully.");
         navigate(`/outstanding/${customerId}`);
       } else {
-        await API.post("/outstanding", payload);
-        alert("Outstanding record created successfully.");
+        const promises = invoices.map((inv) => {
+          const numericAmount = Number(inv.amount || 0);
+          const packedNotes = packNotes(inv.notes, inv.invoiceDate);
+
+          return API.post("/outstanding", {
+            customer: customerId,
+            invoiceNumber: inv.invoiceNumber,
+            date: inv.date,
+            invoiceDate: inv.invoiceDate,
+            amount: numericAmount,
+            totalAmount: numericAmount,
+            status: inv.status,
+            notes: packedNotes,
+          });
+        });
+
+        await Promise.all(promises);
+
+        alert(
+          `${invoices.length} Outstanding invoice${
+            invoices.length > 1 ? "s" : ""
+          } created successfully.`
+        );
         navigate(`/outstanding/${customerId}`);
       }
     } catch (err) {
@@ -139,17 +194,24 @@ function CreateOutstanding() {
       <Sidebar />
 
       <main className="flex-1 p-8">
-        <h1 className="text-3xl font-bold mb-2">
-          {isEdit ? "Edit Outstanding" : "Create Outstanding"}
-        </h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">
+            {isEdit ? "Edit Outstanding" : "Create Outstanding"}
+          </h1>
+
+          <button
+            onClick={() => window.history.back()}
+            className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-medium transition"
+          >
+            ← Back
+          </button>
+        </div>
 
         {customer && (
           <div className="bg-white rounded-xl shadow p-5 mb-6">
             <h2 className="text-xl font-semibold">{customer.name}</h2>
-
-            <p>{customer.phone}</p>
-
-            <p>{customer.address}</p>
+            <p className="text-slate-600 mt-1">{customer.phone}</p>
+            <p className="text-slate-600">{customer.address}</p>
           </div>
         )}
 
@@ -157,124 +219,171 @@ function CreateOutstanding() {
           onSubmit={saveOutstanding}
           className="bg-white rounded-xl shadow p-6"
         >
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div>
-              <label className="font-medium">Invoice Number</label>
-
-              <input
-                type="text"
-                className="border rounded w-full p-3 mt-1"
-                placeholder="INV-001"
-                value={form.invoiceNumber}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    invoiceNumber: e.target.value,
-                  })
-                }
-                required
-              />
-            </div>
-
-            <div>
-              <label className="font-medium">Date</label>
-
-              <input
-                type="date"
-                className="border rounded w-full p-3 mt-1"
-                value={form.date}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    date: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="font-medium">Status</label>
-
-              <select
-                className="border rounded w-full p-3 mt-1"
-                value={form.status}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    status: e.target.value,
-                  })
-                }
+          <div className="space-y-6">
+            {invoices.map((inv, index) => (
+              <div
+                key={index}
+                className={`p-5 rounded-xl border ${
+                  invoices.length > 1
+                    ? "border-slate-300 bg-slate-50/50"
+                    : "border-slate-200"
+                }`}
               >
-                <option>Pending</option>
-                <option>Paid</option>
-              </select>
-            </div>
+                {invoices.length > 1 && (
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Invoice #{index + 1}
+                    </span>
+                    {!isEdit && (
+                      <button
+                        type="button"
+                        onClick={() => removeInvoice(index)}
+                        className="text-red-600 hover:text-red-800 text-xs font-semibold transition"
+                      >
+                        ✕ Remove
+                      </button>
+                    )}
+                  </div>
+                )}
 
-            <div>
-              <label className="font-medium">Invoice Date</label>
+                {/* Single Row for: Invoice Number, Date, Status, Invoice Date, Amount */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Invoice Number
+                    </label>
+                    <input
+                      type="text"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="INV-001"
+                      value={inv.invoiceNumber}
+                      onChange={(e) =>
+                        updateInvoice(index, "invoiceNumber", e.target.value)
+                      }
+                      required
+                    />
+                  </div>
 
-              <input
-                type="date"
-                className="border rounded w-full p-3 mt-1"
-                value={form.invoiceDate}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    invoiceDate: e.target.value,
-                  })
-                }
-              />
-            </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={inv.date}
+                      onChange={(e) =>
+                        updateInvoice(index, "date", e.target.value)
+                      }
+                    />
+                  </div>
 
-            <div>
-              <label className="font-medium">Amount</label>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Status
+                    </label>
+                    <select
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={inv.status}
+                      onChange={(e) =>
+                        updateInvoice(index, "status", e.target.value)
+                      }
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Paid">Paid</option>
+                    </select>
+                  </div>
 
-              <input
-                type="number"
-                step="0.01"
-                className="border rounded w-full p-3 mt-1"
-                placeholder="0.00"
-                value={form.amount}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    amount: e.target.value,
-                  })
-                }
-                required
-              />
-            </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Invoice Date
+                    </label>
+                    <input
+                      type="date"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={inv.invoiceDate}
+                      onChange={(e) =>
+                        updateInvoice(index, "invoiceDate", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Amount
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                      value={inv.amount}
+                      onChange={(e) =>
+                        updateInvoice(index, "amount", e.target.value)
+                      }
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Under that row add notes */}
+                <div className="mt-4">
+                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                    Notes
+                  </label>
+                  <input
+                    type="text"
+                    className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Notes (optional)"
+                    value={inv.notes}
+                    onChange={(e) =>
+                      updateInvoice(index, "notes", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div className="mt-6">
-            <label className="font-medium">Notes</label>
+          {/* Under notes add "add" button to add another outstanding for the same customer */}
+          {!isEdit && (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={addInvoice}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm"
+              >
+                + Add Another Invoice
+              </button>
+            </div>
+          )}
 
-            <textarea
-              rows="3"
-              className="border rounded w-full p-3 mt-1"
-              placeholder="Notes (optional)"
-              value={form.notes}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  notes: e.target.value,
-                })
-              }
-            />
+          {/* Grand Total and Save Button */}
+          <div className="mt-8 border-t pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
+            <button
+              type="submit"
+              className="bg-blue-700 hover:bg-blue-800 text-white px-8 py-3 rounded-lg font-semibold shadow transition"
+            >
+              {isEdit
+                ? "Update Outstanding"
+                : `Save ${invoices.length > 1 ? "All Outstandings" : "Outstanding"}`}
+            </button>
+
+            <div className="text-right">
+              {invoices.length > 1 && (
+                <span className="text-xs font-medium text-slate-500 block mb-0.5">
+                  {invoices.length} Invoices
+                </span>
+              )}
+              <h2 className="text-2xl font-bold text-slate-900">
+                Grand Total : Rs.{" "}
+                {totalAmount.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </h2>
+            </div>
           </div>
-
-          <div className="mt-6 text-right">
-            <h2 className="text-2xl font-bold">
-              Grand Total : Rs. {Number(form.amount || 0).toLocaleString()}
-            </h2>
-          </div>
-
-          <button
-            type="submit"
-            className="mt-6 bg-blue-700 hover:bg-blue-800 text-white px-8 py-3 rounded-lg"
-          >
-            {isEdit ? "Update Outstanding" : "Save Outstanding"}
-          </button>
         </form>
       </main>
     </div>
