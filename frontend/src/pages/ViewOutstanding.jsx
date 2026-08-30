@@ -67,6 +67,82 @@ function ViewOutstanding() {
     }
   };
 
+  const packNotes = (notesStr, invoiceDateStr, remarkStr, paymentMethodStr) => {
+    const clean = cleanNotes(notesStr);
+    const tags = [];
+    if (invoiceDateStr) tags.push(`[invoiceDate:${invoiceDateStr}]`);
+    if (remarkStr && remarkStr.trim()) tags.push(`[remark:${remarkStr.trim()}]`);
+    if (paymentMethodStr && paymentMethodStr !== "N/A" && paymentMethodStr !== "-") {
+      tags.push(`[paymentMethod:${paymentMethodStr}]`);
+    }
+    const joinedTags = tags.join(" ");
+    if (!joinedTags) return clean;
+    return clean ? `${clean} ${joinedTags}` : joinedTags;
+  };
+
+  const updateRemark = async (record, newRemark) => {
+    const invDate = extractInvoiceDate(record);
+    const payMethod = extractPaymentMethod(record);
+    const packed = packNotes(record.notes, invDate, newRemark, payMethod);
+
+    setRecords((prev) =>
+      prev.map((r) =>
+        r._id === record._id
+          ? {
+              ...r,
+              remark: newRemark,
+              description: newRemark,
+              notes: packed,
+            }
+          : r,
+      ),
+    );
+
+    try {
+      await API.put(`/outstanding/${record._id}`, {
+        ...record,
+        remark: newRemark,
+        description: newRemark,
+        notes: packed,
+      });
+    } catch (err) {
+      console.log("Failed to update remark:", err);
+    }
+  };
+
+  const updatePaymentMethod = async (record, newPaymentMethod) => {
+    const invDate = extractInvoiceDate(record);
+    const currentRemark = extractRemark(record);
+    const packed = packNotes(
+      record.notes,
+      invDate,
+      currentRemark === "-" ? "" : currentRemark,
+      newPaymentMethod,
+    );
+
+    setRecords((prev) =>
+      prev.map((r) =>
+        r._id === record._id
+          ? {
+              ...r,
+              paymentMethod: newPaymentMethod,
+              notes: packed,
+            }
+          : r,
+      ),
+    );
+
+    try {
+      await API.put(`/outstanding/${record._id}`, {
+        ...record,
+        paymentMethod: newPaymentMethod,
+        notes: packed,
+      });
+    } catch (err) {
+      console.log("Failed to update payment method:", err);
+    }
+  };
+
   const extractInvoiceDate = (record) => {
     if (!record) return null;
     if (record.invoiceDate) {
@@ -81,9 +157,37 @@ function ViewOutstanding() {
     return null;
   };
 
+  const extractRemark = (record) => {
+    if (!record) return "-";
+    if (record.remark && record.remark.trim()) return record.remark.trim();
+    if (record.description && record.description.trim())
+      return record.description.trim();
+    if (record.notes && record.notes.includes("[remark:")) {
+      const match = record.notes.match(/\[remark:\s*([^\]]+)\]/);
+      if (match && match[1]) return match[1].trim();
+    }
+    return "-";
+  };
+
+  const extractPaymentMethod = (record) => {
+    if (!record) return "-";
+    if (record.paymentMethod && record.paymentMethod !== "N/A") {
+      return record.paymentMethod;
+    }
+    if (record.notes && record.notes.includes("[paymentMethod:")) {
+      const match = record.notes.match(/\[paymentMethod:\s*([^\]]+)\]/);
+      if (match && match[1]) return match[1].trim();
+    }
+    return record.paymentMethod || "-";
+  };
+
   const cleanNotes = (notesStr) => {
     if (!notesStr) return "-";
-    const cleaned = notesStr.replace(/\[invoiceDate:[^\]]+\]/g, "").trim();
+    const cleaned = notesStr
+      .replace(/\[invoiceDate:[^\]]+\]/g, "")
+      .replace(/\[remark:[^\]]+\]/g, "")
+      .replace(/\[paymentMethod:[^\]]+\]/g, "")
+      .trim();
     return cleaned || "-";
   };
 
@@ -280,116 +384,178 @@ function ViewOutstanding() {
               <strong>{records.length}</strong> invoices
             </div>
           </div>
-
           {/* Screen Interactive Table */}
-          <table className="w-full bg-white rounded-xl shadow overflow-hidden mb-8">
-            <thead className="bg-slate-200">
-              <tr>
-                <th className="p-3 text-left">Invoice No</th>
-                <th className="p-3 text-left">Date</th>
-                <th className="p-3 text-left">Invoice Date</th>
-                <th className="p-3 text-left">Notes</th>
-                <th className="p-3 text-left">Total Amount</th>
-                <th className="p-3 text-left">Days</th>
-                <th className="p-3 text-left">Status</th>
-                <th className="p-3 text-left">Actions</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredRecords.map((record) => (
-                <tr key={record._id} className="border-t hover:bg-slate-50">
-                  <td className="p-3 font-semibold">{record.invoiceNumber}</td>
-
-                  <td className="p-3">{formatDate(record.date)}</td>
-                  <td className="p-3">
-                    {formatDate(extractInvoiceDate(record) || record.date)}
-                  </td>
-
-                  <td className="p-3">
-                    {cleanNotes(record.notes || record.description)}
-                  </td>
-
-                  <td className="p-3 font-medium">
-                    Rs.{" "}
-                    {Number(
-                      record.totalAmount || record.amount || 0,
-                    ).toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
-
-                  <td className="p-3">{daysBetween(record)} Days</td>
-
-                  <td className="p-3">
-                    <span
-                      className={`px-3 py-1 rounded text-white text-xs font-semibold ${
-                        record.status === "Pending"
-                          ? "bg-red-600"
-                          : "bg-green-600"
-                      }`}
-                    >
-                      {record.status}
-                    </span>
-                  </td>
-
-                  <td className="p-3 flex gap-2">
-                    <Link
-                      to={`/edit-outstanding/${record._id}`}
-                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded text-sm"
-                    >
-                      Edit
-                    </Link>
-
-                    <button
-                      onClick={() => changeStatus(record)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
-                    >
-                      {record.status === "Pending"
-                        ? "Mark Paid"
-                        : "Mark Pending"}
-                    </button>
-
-                    <button
-                      onClick={() => deleteRecord(record._id)}
-                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm"
-                    >
-                      Delete
-                    </button>
-                  </td>
+          <div className="overflow-x-auto bg-white rounded-xl shadow mb-8">
+            <table className="w-full text-xs text-slate-800 border-collapse">
+              <thead className="bg-slate-200 text-slate-700 uppercase tracking-wider text-[11px] font-bold">
+                <tr className="whitespace-nowrap">
+                  <th className="px-3 py-2.5 text-left">Invoice No</th>
+                  <th className="px-3 py-2.5 text-left">Date</th>
+                  <th className="px-3 py-2.5 text-left">Invoice Date</th>
+                  <th className="px-3 py-2.5 text-left">Remarks</th>
+                  <th className="px-3 py-2.5 text-center">Payment Method</th>
+                  <th className="px-3 py-2.5 text-right">Total Amount</th>
+                  <th className="px-3 py-2.5 text-center">Days</th>
+                  <th className="px-3 py-2.5 text-center">Status</th>
+                  <th className="px-3 py-2.5 text-center">Actions</th>
                 </tr>
-              ))}
+              </thead>
 
-              {filteredRecords.length === 0 && (
-                <tr>
-                  <td colSpan="8" className="text-center py-8 text-slate-500">
-                    {records.length === 0
-                      ? "No outstanding invoices found for this customer."
-                      : "No invoices match the selected date range."}
-                  </td>
-                </tr>
-              )}
+              <tbody>
+                {filteredRecords.map((record) => {
+                  const currentRemark = extractRemark(record);
+                  const currentPayment = extractPaymentMethod(record);
 
-              {filteredRecords.length > 0 && (
-                <tr className="bg-slate-800 text-white font-bold">
-                  <td colSpan="4" className="p-3">
-                    Grand Total Pending
-                  </td>
+                  return (
+                    <tr
+                      key={record._id}
+                      className="border-t border-slate-100 hover:bg-slate-50 whitespace-nowrap"
+                    >
+                      <td className="px-3 py-2 font-semibold text-slate-900">
+                        {record.invoiceNumber}
+                      </td>
 
-                  <td className="p-3">
-                    Rs.{" "}
-                    {grandTotal.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {formatDate(record.date)}
+                      </td>
 
-                  <td colSpan="3"></td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                      <td className="px-3 py-2 text-slate-600">
+                        {formatDate(extractInvoiceDate(record) || record.date)}
+                      </td>
+
+                      {/* Editable Remark in Grid */}
+                      <td className="px-2 py-1.5 min-w-[140px] max-w-[200px]">
+                        <input
+                          type="text"
+                          defaultValue={
+                            currentRemark === "-" ? "" : currentRemark
+                          }
+                          key={record._id + "_" + currentRemark}
+                          onBlur={(e) => {
+                            const val = e.target.value.trim();
+                            if (
+                              val !==
+                              (currentRemark === "-" ? "" : currentRemark)
+                            ) {
+                              updateRemark(record, val);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.target.blur();
+                            }
+                          }}
+                          placeholder="Add remark..."
+                          className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none transition shadow-sm"
+                          title="Click to edit remark"
+                        />
+                      </td>
+
+                      {/* Editable Payment Method in Grid */}
+                      <td className="px-2 py-1.5 text-center min-w-[125px]">
+                        <select
+                          value={
+                            currentPayment === "-" ? "N/A" : currentPayment
+                          }
+                          onChange={(e) =>
+                            updatePaymentMethod(record, e.target.value)
+                          }
+                          className="bg-white border border-slate-200 hover:border-slate-400 focus:border-blue-500 rounded px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none cursor-pointer transition shadow-sm"
+                          title="Change payment method"
+                        >
+                          <option value="N/A">N/A</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Bank Transfer">Bank Transfer</option>
+                          <option value="Cheque">Cheque</option>
+                        </select>
+                      </td>
+
+                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                        Rs.{" "}
+                        {Number(
+                          record.totalAmount || record.amount || 0,
+                        ).toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+
+                      <td className="px-3 py-2 text-center text-slate-600">
+                        {daysBetween(record)} Days
+                      </td>
+
+                      <td className="px-3 py-2 text-center">
+                        <span
+                          className={`px-2.5 py-0.5 rounded text-white text-[11px] font-semibold ${
+                            record.status === "Pending"
+                              ? "bg-red-600"
+                              : "bg-green-600"
+                          }`}
+                        >
+                          {record.status}
+                        </span>
+                      </td>
+
+                      <td className="px-3 py-2 text-center">
+                        <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                          <Link
+                            to={`/edit-outstanding/${record._id}`}
+                            className="bg-yellow-500 hover:bg-yellow-600 text-white px-2.5 py-1 rounded text-xs font-medium transition"
+                          >
+                            Edit
+                          </Link>
+
+                          <button
+                            onClick={() => changeStatus(record)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded text-xs font-medium transition"
+                          >
+                            {record.status === "Pending"
+                              ? "Mark Paid"
+                              : "Mark Pending"}
+                          </button>
+
+                          <button
+                            onClick={() => deleteRecord(record._id)}
+                            className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded text-xs font-medium transition"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredRecords.length === 0 && (
+                  <tr>
+                    <td colSpan="9" className="text-center py-6 text-slate-500">
+                      {records.length === 0
+                        ? "No outstanding invoices found for this customer."
+                        : "No invoices match the selected date range."}
+                    </td>
+                  </tr>
+                )}
+
+                {filteredRecords.length > 0 && (
+                  <tr className="bg-slate-800 text-white font-bold whitespace-nowrap">
+                    <td colSpan="5" className="px-3 py-2.5 text-sm">
+                      Grand Total Pending
+                    </td>
+
+                    <td className="px-3 py-2.5 text-right text-sm">
+                      Rs.{" "}
+                      {grandTotal.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+
+                    <td colSpan="3"></td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Professional Printable PDF Statement Area */}
@@ -478,23 +644,29 @@ function ViewOutstanding() {
                 </div>
               </div>
 
-              {/* Requested 5-Column Printable Table */}
-              <table className="w-full border-collapse text-xs">
+              {/* Printable Table with Remarks and Payment Method */}
+              <table className="w-full border-collapse text-[11px]">
                 <thead>
-                  <tr className="table-head bg-slate-800 text-white">
-                    <th className="w-[28%] border border-slate-700 px-3 py-2 text-left font-bold text-white">
+                  <tr className="table-head bg-slate-800 text-white whitespace-nowrap text-[10.5px]">
+                    <th className="w-[16%] border border-slate-700 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">
                       INVOICE NUMBER
                     </th>
-                    <th className="w-[20%] border border-slate-700 px-3 py-2 text-center font-bold text-white">
+                    <th className="w-[13%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       INVOICE DATE
                     </th>
-                    <th className="w-[24%] border border-slate-700 px-3 py-2 text-right font-bold text-white">
+                    <th className="w-[18%] border border-slate-700 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">
+                      REMARKS
+                    </th>
+                    <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                      PAYMENT METHOD
+                    </th>
+                    <th className="w-[18%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">
                       TOTAL AMOUNT
                     </th>
-                    <th className="w-[14%] border border-slate-700 px-3 py-2 text-center font-bold text-white">
+                    <th className="w-[10%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       DAYS
                     </th>
-                    <th className="w-[14%] border border-slate-700 px-3 py-2 text-center font-bold text-white">
+                    <th className="w-[10%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       STATUS
                     </th>
                   </tr>
@@ -504,17 +676,25 @@ function ViewOutstanding() {
                   {filteredRecords.map((record) => (
                     <tr
                       key={record._id}
-                      className="border-b border-slate-200 hover:bg-slate-50"
+                      className="border-b border-slate-200 hover:bg-slate-50 whitespace-nowrap text-[11px]"
                     >
-                      <td className="border border-slate-300 px-3 py-2 font-semibold text-slate-900">
+                      <td className="border border-slate-300 px-2 py-1.5 font-semibold text-slate-900 whitespace-nowrap">
                         {record.invoiceNumber}
                       </td>
 
-                      <td className="border border-slate-300 px-3 py-2 text-center text-slate-700">
+                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 whitespace-nowrap">
                         {formatDate(extractInvoiceDate(record) || record.date)}
                       </td>
 
-                      <td className="border border-slate-300 px-3 py-2 text-right font-medium text-slate-900">
+                      <td className="border border-slate-300 px-2 py-1.5 text-left text-slate-700 whitespace-nowrap">
+                        {extractRemark(record)}
+                      </td>
+
+                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 font-medium whitespace-nowrap">
+                        {extractPaymentMethod(record)}
+                      </td>
+
+                      <td className="border border-slate-300 px-2 py-1.5 text-right font-medium text-slate-900 whitespace-nowrap">
                         Rs.{" "}
                         {Number(
                           record.totalAmount || record.amount || 0,
@@ -524,11 +704,11 @@ function ViewOutstanding() {
                         })}
                       </td>
 
-                      <td className="border border-slate-300 px-3 py-2 text-center text-slate-700">
+                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 whitespace-nowrap">
                         {daysBetween(record)} Days
                       </td>
 
-                      <td className="border border-slate-300 px-3 py-2 text-center font-semibold">
+                      <td className="border border-slate-300 px-2 py-1.5 text-center font-semibold whitespace-nowrap">
                         <span
                           className={
                             record.status === "Pending"
@@ -545,8 +725,8 @@ function ViewOutstanding() {
                   {filteredRecords.length === 0 && (
                     <tr>
                       <td
-                        colSpan={5}
-                        className="border border-slate-300 px-3 py-6 text-center text-slate-500"
+                        colSpan={7}
+                        className="border border-slate-300 px-3 py-6 text-center text-slate-500 whitespace-nowrap"
                       >
                         No outstanding records found for the selected period.
                       </td>
@@ -554,15 +734,15 @@ function ViewOutstanding() {
                   )}
 
                   {/* Grand Total Row */}
-                  <tr className="grand-total-row bg-slate-900 text-white font-bold">
+                  <tr className="grand-total-row bg-slate-900 text-white font-bold whitespace-nowrap">
                     <td
-                      colSpan={2}
-                      className="border border-slate-900 px-3 py-2.5 text-sm font-bold tracking-wide text-white"
+                      colSpan={4}
+                      className="border border-slate-900 px-2 py-2 text-xs font-bold tracking-wide text-white whitespace-nowrap"
                     >
                       GRAND TOTAL PENDING
                     </td>
 
-                    <td className="border border-slate-900 px-3 py-2.5 text-right text-sm font-bold text-white">
+                    <td className="border border-slate-900 px-2 py-2 text-right text-xs font-bold text-white whitespace-nowrap">
                       Rs.{" "}
                       {grandTotal.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
@@ -572,7 +752,7 @@ function ViewOutstanding() {
 
                     <td
                       colSpan={2}
-                      className="border border-slate-900 px-3 py-2.5 text-center text-xs text-slate-300"
+                      className="border border-slate-900 px-2 py-2 text-center text-[10.5px] text-slate-300 whitespace-nowrap"
                     >
                       {filteredRecords.filter((r) => r.status === "Pending")
                         .length}{" "}

@@ -66,6 +66,17 @@ const outstandingSchema = new mongoose.Schema(
       default: "",
     },
 
+    remark: {
+      type: String,
+      default: "",
+    },
+
+    paymentMethod: {
+      type: String,
+      enum: ["N/A", "Cash", "Bank Transfer", "Cheque"],
+      default: "N/A",
+    },
+
     status: {
       type: String,
       enum: ["Pending", "Paid"],

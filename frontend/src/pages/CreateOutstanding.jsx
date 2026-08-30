@@ -3,29 +3,63 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import API from "../api/api";
 import Sidebar from "../components/Sidebar";
 
-const extractInvoiceDate = (record) => {
-  if (!record) return null;
+const extractMetadata = (record) => {
+  let invoiceDate = null;
+  let remark = record.remark || record.description || "";
+  let paymentMethod = record.paymentMethod || "N/A";
+
   if (record.invoiceDate) {
-    return typeof record.invoiceDate === "string"
-      ? record.invoiceDate.split("T")[0]
-      : new Date(record.invoiceDate).toISOString().split("T")[0];
+    invoiceDate =
+      typeof record.invoiceDate === "string"
+        ? record.invoiceDate.split("T")[0]
+        : new Date(record.invoiceDate).toISOString().split("T")[0];
   }
-  if (record.notes && record.notes.includes("[invoiceDate:")) {
-    const match = record.notes.match(/\[invoiceDate:\s*([^\]]+)\]/);
-    if (match && match[1]) return match[1].trim();
+
+  if (record.notes) {
+    if (!invoiceDate && record.notes.includes("[invoiceDate:")) {
+      const match = record.notes.match(/\[invoiceDate:\s*([^\]]+)\]/);
+      if (match && match[1]) invoiceDate = match[1].trim();
+    }
+    if (!remark && record.notes.includes("[remark:")) {
+      const match = record.notes.match(/\[remark:\s*([^\]]+)\]/);
+      if (match && match[1]) remark = match[1].trim();
+    }
+    if (
+      (!paymentMethod || paymentMethod === "N/A") &&
+      record.notes.includes("[paymentMethod:")
+    ) {
+      const match = record.notes.match(/\[paymentMethod:\s*([^\]]+)\]/);
+      if (match && match[1]) paymentMethod = match[1].trim();
+    }
   }
-  return null;
+
+  return {
+    invoiceDate,
+    remark,
+    paymentMethod: paymentMethod || "N/A",
+  };
 };
 
 const cleanNotes = (notesStr) => {
   if (!notesStr) return "";
-  return notesStr.replace(/\[invoiceDate:[^\]]+\]/g, "").trim();
+  return notesStr
+    .replace(/\[invoiceDate:[^\]]+\]/g, "")
+    .replace(/\[remark:[^\]]+\]/g, "")
+    .replace(/\[paymentMethod:[^\]]+\]/g, "")
+    .trim();
 };
 
-const packNotes = (notesStr, invoiceDateStr) => {
+const packNotes = (notesStr, invoiceDateStr, remarkStr, paymentMethodStr) => {
   const clean = cleanNotes(notesStr);
-  if (!invoiceDateStr) return clean;
-  return clean ? `${clean} [invoiceDate:${invoiceDateStr}]` : `[invoiceDate:${invoiceDateStr}]`;
+  const tags = [];
+  if (invoiceDateStr) tags.push(`[invoiceDate:${invoiceDateStr}]`);
+  if (remarkStr && remarkStr.trim()) tags.push(`[remark:${remarkStr.trim()}]`);
+  if (paymentMethodStr && paymentMethodStr !== "N/A") {
+    tags.push(`[paymentMethod:${paymentMethodStr}]`);
+  }
+  const joinedTags = tags.join(" ");
+  if (!joinedTags) return clean;
+  return clean ? `${clean} ${joinedTags}` : joinedTags;
 };
 
 function CreateOutstanding() {
@@ -43,6 +77,8 @@ function CreateOutstanding() {
     invoiceDate: getToday(),
     amount: "",
     notes: "",
+    remark: "",
+    paymentMethod: "N/A",
   });
 
   const [customer, setCustomer] = useState(null);
@@ -73,8 +109,9 @@ function CreateOutstanding() {
         if (res.data.customer) {
           setCustomer(res.data.customer);
         }
+        const meta = extractMetadata(res.data);
         const parsedInvoiceDate =
-          extractInvoiceDate(res.data) ||
+          meta.invoiceDate ||
           (res.data.date ? res.data.date.split("T")[0] : getToday());
 
         setInvoices([
@@ -92,7 +129,9 @@ function CreateOutstanding() {
                   res.data.totalAmount !== null
                 ? res.data.totalAmount
                 : "",
-            notes: cleanNotes(res.data.notes || res.data.description || ""),
+            notes: cleanNotes(res.data.notes || ""),
+            remark: meta.remark || "",
+            paymentMethod: meta.paymentMethod || "N/A",
           },
         ]);
       }
@@ -142,7 +181,12 @@ function CreateOutstanding() {
       if (isEdit) {
         const inv = invoices[0];
         const numericAmount = Number(inv.amount || 0);
-        const packedNotes = packNotes(inv.notes, inv.invoiceDate);
+        const packedNotes = packNotes(
+          inv.notes,
+          inv.invoiceDate,
+          inv.remark,
+          inv.paymentMethod
+        );
 
         await API.put(`/outstanding/${id}`, {
           customer: customerId,
@@ -152,6 +196,9 @@ function CreateOutstanding() {
           amount: numericAmount,
           totalAmount: numericAmount,
           status: inv.status,
+          remark: inv.remark || "",
+          description: inv.remark || "",
+          paymentMethod: inv.paymentMethod || "N/A",
           notes: packedNotes,
         });
 
@@ -160,7 +207,12 @@ function CreateOutstanding() {
       } else {
         const promises = invoices.map((inv) => {
           const numericAmount = Number(inv.amount || 0);
-          const packedNotes = packNotes(inv.notes, inv.invoiceDate);
+          const packedNotes = packNotes(
+            inv.notes,
+            inv.invoiceDate,
+            inv.remark,
+            inv.paymentMethod
+          );
 
           return API.post("/outstanding", {
             customer: customerId,
@@ -170,6 +222,9 @@ function CreateOutstanding() {
             amount: numericAmount,
             totalAmount: numericAmount,
             status: inv.status,
+            remark: inv.remark || "",
+            description: inv.remark || "",
+            paymentMethod: inv.paymentMethod || "N/A",
             notes: packedNotes,
           });
         });
@@ -246,7 +301,7 @@ function CreateOutstanding() {
                   </div>
                 )}
 
-                {/* Single Row for: Invoice Number, Date, Status, Invoice Date, Amount */}
+                {/* First Row: Invoice Number, Date, Status, Invoice Date, Amount */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
@@ -326,26 +381,61 @@ function CreateOutstanding() {
                   </div>
                 </div>
 
-                {/* Under that row add notes */}
-                <div className="mt-4">
-                  <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-                    Notes
-                  </label>
-                  <input
-                    type="text"
-                    className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Notes (optional)"
-                    value={inv.notes}
-                    onChange={(e) =>
-                      updateInvoice(index, "notes", e.target.value)
-                    }
-                  />
+                {/* Second Row: Notes, Remark, Payment Method */}
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Notes
+                    </label>
+                    <input
+                      type="text"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Notes (optional)"
+                      value={inv.notes}
+                      onChange={(e) =>
+                        updateInvoice(index, "notes", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Remark
+                    </label>
+                    <input
+                      type="text"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Remark (optional)"
+                      value={inv.remark}
+                      onChange={(e) =>
+                        updateInvoice(index, "remark", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Payment Method
+                    </label>
+                    <select
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={inv.paymentMethod}
+                      onChange={(e) =>
+                        updateInvoice(index, "paymentMethod", e.target.value)
+                      }
+                    >
+                      <option value="N/A">N/A</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Cheque">Cheque</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Under notes add "add" button to add another outstanding for the same customer */}
+          {/* Under notes row add "add" button to add another outstanding for the same customer */}
           {!isEdit && (
             <div className="mt-5">
               <button
