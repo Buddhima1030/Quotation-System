@@ -387,7 +387,7 @@ function CreateOutstanding() {
                   </div>
                 )}
 
-                {/* First Row: Invoice Number, Date, Status, Invoice Date, Amount */}
+                {/* First Row: Invoice Number, Invoice Date, Date, Status, Amount */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
@@ -412,6 +412,20 @@ function CreateOutstanding() {
                         ⚠️ {getDuplicateError(index, inv.invoiceNumber)}
                       </span>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Invoice Date
+                    </label>
+                    <input
+                      type="date"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={inv.invoiceDate}
+                      onChange={(e) =>
+                        updateInvoice(index, "invoiceDate", e.target.value)
+                      }
+                    />
                   </div>
 
                   <div>
@@ -442,20 +456,6 @@ function CreateOutstanding() {
                       <option value="Pending">Pending</option>
                       <option value="Paid">Paid</option>
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-                      Invoice Date
-                    </label>
-                    <input
-                      type="date"
-                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={inv.invoiceDate}
-                      onChange={(e) =>
-                        updateInvoice(index, "invoiceDate", e.target.value)
-                      }
-                    />
                   </div>
 
                   <div>
