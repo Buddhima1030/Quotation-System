@@ -22,9 +22,16 @@ function ViewOutstanding() {
     try {
       const res = await API.get("/outstanding");
 
-      const filtered = res.data.filter(
-        (r) => r.customer && r.customer._id === id,
-      );
+      const filtered = res.data
+        .filter((r) => r.customer && r.customer._id === id)
+        .sort((a, b) => {
+          const invA = String(a.invoiceNumber || "").trim();
+          const invB = String(b.invoiceNumber || "").trim();
+          return invA.localeCompare(invB, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+        });
 
       setRecords(filtered);
       if (filtered.length > 0 && filtered[0].customer) {
@@ -228,33 +235,42 @@ function ViewOutstanding() {
     return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
   };
 
-  const filteredRecords = records.filter((record) => {
-    if (
-      statusFilter &&
-      statusFilter !== "All" &&
-      record.status !== statusFilter
-    ) {
-      return false;
-    }
+  const filteredRecords = records
+    .filter((record) => {
+      if (
+        statusFilter &&
+        statusFilter !== "All" &&
+        record.status !== statusFilter
+      ) {
+        return false;
+      }
 
-    const rawDate =
-      extractInvoiceDate(record) ||
-      (record.date
-        ? typeof record.date === "string"
-          ? record.date.split("T")[0]
-          : new Date(record.date).toISOString().split("T")[0]
-        : "");
+      const rawDate =
+        extractInvoiceDate(record) ||
+        (record.date
+          ? typeof record.date === "string"
+            ? record.date.split("T")[0]
+            : new Date(record.date).toISOString().split("T")[0]
+          : "");
 
-    if (!rawDate) return true;
+      if (!rawDate) return true;
 
-    if (fromDate && rawDate < fromDate) {
-      return false;
-    }
-    if (toDate && rawDate > toDate) {
-      return false;
-    }
-    return true;
-  });
+      if (fromDate && rawDate < fromDate) {
+        return false;
+      }
+      if (toDate && rawDate > toDate) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const invA = String(a.invoiceNumber || "").trim();
+      const invB = String(b.invoiceNumber || "").trim();
+      return invA.localeCompare(invB, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
 
   const grandTotal = filteredRecords
     .filter((r) => r.status === "Pending")

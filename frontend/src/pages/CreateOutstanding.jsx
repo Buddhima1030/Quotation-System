@@ -83,14 +83,55 @@ function CreateOutstanding() {
 
   const [customer, setCustomer] = useState(null);
   const [invoices, setInvoices] = useState([emptyInvoice()]);
+  const [allExistingInvoices, setAllExistingInvoices] = useState([]);
 
   useEffect(() => {
+    loadExistingInvoices();
     if (isEdit) {
       loadOutstandingRecord();
     } else {
       loadCustomer();
     }
   }, [id, isEdit]);
+
+  const loadExistingInvoices = async () => {
+    try {
+      const res = await API.get("/outstanding");
+      setAllExistingInvoices(res.data || []);
+    } catch (err) {
+      console.log("Failed to load existing invoices:", err);
+    }
+  };
+
+  const getDuplicateError = (index, invNum) => {
+    const trimmed = (invNum || "").trim().toLowerCase();
+    if (!trimmed) return null;
+
+    // Check duplicate in other rows of the current form
+    for (let i = 0; i < invoices.length; i++) {
+      if (
+        i !== index &&
+        (invoices[i].invoiceNumber || "").trim().toLowerCase() === trimmed
+      ) {
+        return `Duplicate with Invoice #${i + 1} in this form`;
+      }
+    }
+
+    // Check duplicate in database
+    const found = allExistingInvoices.find((record) => {
+      if (isEdit && record._id === id) return false;
+      return (record.invoiceNumber || "").trim().toLowerCase() === trimmed;
+    });
+
+    if (found) {
+      const custName = found.customer?.name
+        ? ` (${found.customer.name})`
+        : "";
+      return `Already exists in database${custName}`;
+    }
+
+    return null;
+  };
 
   const loadCustomer = async () => {
     try {
@@ -177,6 +218,47 @@ function CreateOutstanding() {
       }
     }
 
+    // Check duplicate invoice numbers within current form entries
+    const seenInForm = new Set();
+    for (let i = 0; i < invoices.length; i++) {
+      const invTrimmed = invoices[i].invoiceNumber.trim().toLowerCase();
+      if (seenInForm.has(invTrimmed)) {
+        alert(
+          `Duplicate invoice number "${invoices[i].invoiceNumber.trim()}" in invoice #${
+            i + 1
+          }. Each invoice number must be unique.`
+        );
+        return;
+      }
+      seenInForm.add(invTrimmed);
+    }
+
+    // Validate against existing invoices in database (across same or different customers)
+    try {
+      const existingRes = await API.get("/outstanding");
+      const allExisting = existingRes.data || [];
+
+      for (let i = 0; i < invoices.length; i++) {
+        const invTrimmed = invoices[i].invoiceNumber.trim().toLowerCase();
+        const duplicate = allExisting.find((record) => {
+          if (isEdit && record._id === id) return false;
+          return (record.invoiceNumber || "").trim().toLowerCase() === invTrimmed;
+        });
+
+        if (duplicate) {
+          const custName = duplicate.customer?.name
+            ? ` (Customer: ${duplicate.customer.name})`
+            : "";
+          alert(
+            `Invoice number "${invoices[i].invoiceNumber.trim()}" already exists${custName}. Invoice numbers cannot be duplicated for the same or different customers.`
+          );
+          return;
+        }
+      }
+    } catch (err) {
+      console.log("Could not check duplicate invoices:", err);
+    }
+
     try {
       if (isEdit) {
         const inv = invoices[0];
@@ -190,7 +272,7 @@ function CreateOutstanding() {
 
         await API.put(`/outstanding/${id}`, {
           customer: customerId,
-          invoiceNumber: inv.invoiceNumber,
+          invoiceNumber: inv.invoiceNumber.trim(),
           date: inv.date,
           invoiceDate: inv.invoiceDate,
           amount: numericAmount,
@@ -216,7 +298,7 @@ function CreateOutstanding() {
 
           return API.post("/outstanding", {
             customer: customerId,
-            invoiceNumber: inv.invoiceNumber,
+            invoiceNumber: inv.invoiceNumber.trim(),
             date: inv.date,
             invoiceDate: inv.invoiceDate,
             amount: numericAmount,
@@ -240,7 +322,11 @@ function CreateOutstanding() {
       }
     } catch (err) {
       console.log(err);
-      alert(`Failed to ${isEdit ? "update" : "save"} outstanding.`);
+      const errorMsg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        `Failed to ${isEdit ? "update" : "save"} outstanding.`;
+      alert(errorMsg);
     }
   };
 
@@ -309,7 +395,11 @@ function CreateOutstanding() {
                     </label>
                     <input
                       type="text"
-                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`border rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 ${
+                        getDuplicateError(index, inv.invoiceNumber)
+                          ? "border-red-500 bg-red-50/50 text-red-900 focus:ring-red-500"
+                          : "border-slate-300 focus:ring-blue-500"
+                      }`}
                       placeholder="INV-001"
                       value={inv.invoiceNumber}
                       onChange={(e) =>
@@ -317,6 +407,11 @@ function CreateOutstanding() {
                       }
                       required
                     />
+                    {getDuplicateError(index, inv.invoiceNumber) && (
+                      <span className="text-[11px] font-semibold text-red-600 mt-1 block">
+                        ⚠️ {getDuplicateError(index, inv.invoiceNumber)}
+                      </span>
+                    )}
                   </div>
 
                   <div>
