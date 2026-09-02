@@ -56,6 +56,20 @@ const outstandingSchema = new mongoose.Schema(
       default: 0,
     },
 
+    paidAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    outstandingAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    dueDate: {
+      type: Date,
+    },
+
     notes: {
       type: String,
       default: "",

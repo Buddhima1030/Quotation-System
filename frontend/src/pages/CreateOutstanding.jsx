@@ -7,6 +7,19 @@ const extractMetadata = (record) => {
   let invoiceDate = null;
   let remark = record.remark || record.description || "";
   let paymentMethod = record.paymentMethod || "N/A";
+  let paidAmount =
+    record.paidAmount !== undefined && record.paidAmount !== null
+      ? record.paidAmount
+      : "";
+  let outstandingAmount =
+    record.outstandingAmount !== undefined && record.outstandingAmount !== null
+      ? record.outstandingAmount
+      : "";
+  let dueDate = record.dueDate
+    ? typeof record.dueDate === "string"
+      ? record.dueDate.split("T")[0]
+      : new Date(record.dueDate).toISOString().split("T")[0]
+    : "";
 
   if (record.invoiceDate) {
     invoiceDate =
@@ -31,12 +44,30 @@ const extractMetadata = (record) => {
       const match = record.notes.match(/\[paymentMethod:\s*([^\]]+)\]/);
       if (match && match[1]) paymentMethod = match[1].trim();
     }
+    if (paidAmount === "" && record.notes.includes("[paidAmount:")) {
+      const match = record.notes.match(/\[paidAmount:\s*([^\]]+)\]/);
+      if (match && match[1]) paidAmount = match[1].trim();
+    }
+    if (
+      outstandingAmount === "" &&
+      record.notes.includes("[outstandingAmount:")
+    ) {
+      const match = record.notes.match(/\[outstandingAmount:\s*([^\]]+)\]/);
+      if (match && match[1]) outstandingAmount = match[1].trim();
+    }
+    if (!dueDate && record.notes.includes("[dueDate:")) {
+      const match = record.notes.match(/\[dueDate:\s*([^\]]+)\]/);
+      if (match && match[1]) dueDate = match[1].trim();
+    }
   }
 
   return {
     invoiceDate,
     remark,
     paymentMethod: paymentMethod || "N/A",
+    paidAmount,
+    outstandingAmount,
+    dueDate,
   };
 };
 
@@ -46,10 +77,21 @@ const cleanNotes = (notesStr) => {
     .replace(/\[invoiceDate:[^\]]+\]/g, "")
     .replace(/\[remark:[^\]]+\]/g, "")
     .replace(/\[paymentMethod:[^\]]+\]/g, "")
+    .replace(/\[paidAmount:[^\]]+\]/g, "")
+    .replace(/\[outstandingAmount:[^\]]+\]/g, "")
+    .replace(/\[dueDate:[^\]]+\]/g, "")
     .trim();
 };
 
-const packNotes = (notesStr, invoiceDateStr, remarkStr, paymentMethodStr) => {
+const packNotes = (
+  notesStr,
+  invoiceDateStr,
+  remarkStr,
+  paymentMethodStr,
+  paidAmountVal,
+  outstandingAmountVal,
+  dueDateStr
+) => {
   const clean = cleanNotes(notesStr);
   const tags = [];
   if (invoiceDateStr) tags.push(`[invoiceDate:${invoiceDateStr}]`);
@@ -57,6 +99,22 @@ const packNotes = (notesStr, invoiceDateStr, remarkStr, paymentMethodStr) => {
   if (paymentMethodStr && paymentMethodStr !== "N/A") {
     tags.push(`[paymentMethod:${paymentMethodStr}]`);
   }
+  if (
+    paidAmountVal !== undefined &&
+    paidAmountVal !== null &&
+    paidAmountVal !== ""
+  ) {
+    tags.push(`[paidAmount:${paidAmountVal}]`);
+  }
+  if (
+    outstandingAmountVal !== undefined &&
+    outstandingAmountVal !== null &&
+    outstandingAmountVal !== ""
+  ) {
+    tags.push(`[outstandingAmount:${outstandingAmountVal}]`);
+  }
+  if (dueDateStr) tags.push(`[dueDate:${dueDateStr}]`);
+
   const joinedTags = tags.join(" ");
   if (!joinedTags) return clean;
   return clean ? `${clean} ${joinedTags}` : joinedTags;
@@ -76,6 +134,9 @@ function CreateOutstanding() {
     status: "Pending",
     invoiceDate: getToday(),
     amount: "",
+    paidAmount: "",
+    outstandingAmount: "",
+    dueDate: "",
     notes: "",
     remark: "",
     paymentMethod: "N/A",
@@ -107,7 +168,6 @@ function CreateOutstanding() {
     const trimmed = (invNum || "").trim().toLowerCase();
     if (!trimmed) return null;
 
-    // Check duplicate in other rows of the current form
     for (let i = 0; i < invoices.length; i++) {
       if (
         i !== index &&
@@ -117,7 +177,6 @@ function CreateOutstanding() {
       }
     }
 
-    // Check duplicate in database
     const found = allExistingInvoices.find((record) => {
       if (isEdit && record._id === id) return false;
       return (record.invoiceNumber || "").trim().toLowerCase() === trimmed;
@@ -162,14 +221,14 @@ function CreateOutstanding() {
             status: res.data.status || "Pending",
             invoiceDate: parsedInvoiceDate,
             amount:
-              res.data.amount !== undefined &&
-              res.data.amount !== null &&
-              res.data.amount !== 0
+              res.data.amount !== undefined && res.data.amount !== null
                 ? res.data.amount
-                : res.data.totalAmount !== undefined &&
-                  res.data.totalAmount !== null
+                : res.data.totalAmount !== undefined
                 ? res.data.totalAmount
                 : "",
+            paidAmount: meta.paidAmount,
+            outstandingAmount: meta.outstandingAmount,
+            dueDate: meta.dueDate,
             notes: cleanNotes(res.data.notes || ""),
             remark: meta.remark || "",
             paymentMethod: meta.paymentMethod || "N/A",
@@ -193,6 +252,13 @@ function CreateOutstanding() {
   const updateInvoice = (index, field, value) => {
     const updated = [...invoices];
     updated[index][field] = value;
+
+    if (field === "amount" || field === "paidAmount") {
+      const amt = Number(field === "amount" ? value : updated[index].amount) || 0;
+      const paid = Number(field === "paidAmount" ? value : updated[index].paidAmount) || 0;
+      updated[index].outstandingAmount = Math.max(0, amt - paid);
+    }
+
     setInvoices(updated);
   };
 
@@ -201,12 +267,21 @@ function CreateOutstanding() {
     0
   );
 
+  const totalOutstanding = invoices.reduce((sum, inv) => {
+    const amt = Number(inv.amount || 0);
+    const paid = Number(inv.paidAmount || 0);
+    const out =
+      inv.outstandingAmount !== "" && !isNaN(Number(inv.outstandingAmount))
+        ? Number(inv.outstandingAmount)
+        : Math.max(0, amt - paid);
+    return sum + out;
+  }, 0);
+
   const saveOutstanding = async (e) => {
     e.preventDefault();
 
     const customerId = customer?._id || id;
 
-    // Validate that invoice numbers and amounts are present
     for (let i = 0; i < invoices.length; i++) {
       if (!invoices[i].invoiceNumber.trim()) {
         alert(`Please enter an Invoice Number for invoice #${i + 1}`);
@@ -218,7 +293,6 @@ function CreateOutstanding() {
       }
     }
 
-    // Check duplicate invoice numbers within current form entries
     const seenInForm = new Set();
     for (let i = 0; i < invoices.length; i++) {
       const invTrimmed = invoices[i].invoiceNumber.trim().toLowerCase();
@@ -233,7 +307,6 @@ function CreateOutstanding() {
       seenInForm.add(invTrimmed);
     }
 
-    // Validate against existing invoices in database (across same or different customers)
     try {
       const existingRes = await API.get("/outstanding");
       const allExisting = existingRes.data || [];
@@ -263,11 +336,20 @@ function CreateOutstanding() {
       if (isEdit) {
         const inv = invoices[0];
         const numericAmount = Number(inv.amount || 0);
+        const numericPaid = Number(inv.paidAmount || 0);
+        const numericOutstanding =
+          inv.outstandingAmount !== "" && !isNaN(Number(inv.outstandingAmount))
+            ? Number(inv.outstandingAmount)
+            : Math.max(0, numericAmount - numericPaid);
+
         const packedNotes = packNotes(
           inv.notes,
           inv.invoiceDate,
           inv.remark,
-          inv.paymentMethod
+          inv.paymentMethod,
+          numericPaid,
+          numericOutstanding,
+          inv.dueDate
         );
 
         await API.put(`/outstanding/${id}`, {
@@ -277,6 +359,9 @@ function CreateOutstanding() {
           invoiceDate: inv.invoiceDate,
           amount: numericAmount,
           totalAmount: numericAmount,
+          paidAmount: numericPaid,
+          outstandingAmount: numericOutstanding,
+          dueDate: inv.dueDate || null,
           status: inv.status,
           remark: inv.remark || "",
           description: inv.remark || "",
@@ -289,11 +374,20 @@ function CreateOutstanding() {
       } else {
         const promises = invoices.map((inv) => {
           const numericAmount = Number(inv.amount || 0);
+          const numericPaid = Number(inv.paidAmount || 0);
+          const numericOutstanding =
+            inv.outstandingAmount !== "" && !isNaN(Number(inv.outstandingAmount))
+              ? Number(inv.outstandingAmount)
+              : Math.max(0, numericAmount - numericPaid);
+
           const packedNotes = packNotes(
             inv.notes,
             inv.invoiceDate,
             inv.remark,
-            inv.paymentMethod
+            inv.paymentMethod,
+            numericPaid,
+            numericOutstanding,
+            inv.dueDate
           );
 
           return API.post("/outstanding", {
@@ -303,6 +397,9 @@ function CreateOutstanding() {
             invoiceDate: inv.invoiceDate,
             amount: numericAmount,
             totalAmount: numericAmount,
+            paidAmount: numericPaid,
+            outstandingAmount: numericOutstanding,
+            dueDate: inv.dueDate || null,
             status: inv.status,
             remark: inv.remark || "",
             description: inv.remark || "",
@@ -476,7 +573,56 @@ function CreateOutstanding() {
                   </div>
                 </div>
 
-                {/* Second Row: Notes, Remark, Payment Method */}
+                {/* Second Row: Paid Amount, Outstanding Amount, Due Date */}
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Paid Amount
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                      value={inv.paidAmount}
+                      onChange={(e) =>
+                        updateInvoice(index, "paidAmount", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Outstanding Amount
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                      placeholder="0.00"
+                      value={inv.outstandingAmount}
+                      onChange={(e) =>
+                        updateInvoice(index, "outstandingAmount", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      className="border border-slate-300 rounded-lg w-full p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={inv.dueDate}
+                      onChange={(e) =>
+                        updateInvoice(index, "dueDate", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Third Row: Notes, Remark, Payment Method */}
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">

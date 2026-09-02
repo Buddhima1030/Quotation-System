@@ -74,23 +74,125 @@ function ViewOutstanding() {
     }
   };
 
-  const packNotes = (notesStr, invoiceDateStr, remarkStr, paymentMethodStr) => {
+  const extractPaidAmount = (record) => {
+    if (!record) return 0;
+    if (
+      record.paidAmount !== undefined &&
+      record.paidAmount !== null &&
+      record.paidAmount !== ""
+    ) {
+      return Number(record.paidAmount) || 0;
+    }
+    if (record.notes && record.notes.includes("[paidAmount:")) {
+      const match = record.notes.match(/\[paidAmount:\s*([^\]]+)\]/);
+      if (match && match[1]) return Number(match[1]) || 0;
+    }
+    return 0;
+  };
+
+  const extractOutstandingAmount = (record) => {
+    if (!record) return 0;
+    if (
+      record.outstandingAmount !== undefined &&
+      record.outstandingAmount !== null &&
+      record.outstandingAmount !== ""
+    ) {
+      return Number(record.outstandingAmount);
+    }
+    if (record.notes && record.notes.includes("[outstandingAmount:")) {
+      const match = record.notes.match(/\[outstandingAmount:\s*([^\]]+)\]/);
+      if (match && match[1]) return Number(match[1]);
+    }
+    const invAmt = Number(record.totalAmount || record.amount || 0);
+    const paid = extractPaidAmount(record);
+    return Math.max(0, invAmt - paid);
+  };
+
+  const extractDueDate = (record) => {
+    if (!record) return null;
+    if (record.dueDate) {
+      return typeof record.dueDate === "string"
+        ? record.dueDate.split("T")[0]
+        : new Date(record.dueDate).toISOString().split("T")[0];
+    }
+    if (record.notes && record.notes.includes("[dueDate:")) {
+      const match = record.notes.match(/\[dueDate:\s*([^\]]+)\]/);
+      if (match && match[1]) return match[1].trim();
+    }
+    return null;
+  };
+
+  const cleanNotes = (notesStr) => {
+    if (!notesStr) return "-";
+    const cleaned = notesStr
+      .replace(/\[invoiceDate:[^\]]+\]/g, "")
+      .replace(/\[remark:[^\]]+\]/g, "")
+      .replace(/\[paymentMethod:[^\]]+\]/g, "")
+      .replace(/\[paidAmount:[^\]]+\]/g, "")
+      .replace(/\[outstandingAmount:[^\]]+\]/g, "")
+      .replace(/\[dueDate:[^\]]+\]/g, "")
+      .trim();
+    return cleaned || "-";
+  };
+
+  const packNotes = (
+    notesStr,
+    invoiceDateStr,
+    remarkStr,
+    paymentMethodStr,
+    paidAmountVal,
+    outstandingAmountVal,
+    dueDateStr,
+  ) => {
     const clean = cleanNotes(notesStr);
     const tags = [];
     if (invoiceDateStr) tags.push(`[invoiceDate:${invoiceDateStr}]`);
-    if (remarkStr && remarkStr.trim()) tags.push(`[remark:${remarkStr.trim()}]`);
-    if (paymentMethodStr && paymentMethodStr !== "N/A" && paymentMethodStr !== "-") {
+    if (remarkStr && remarkStr.trim() && remarkStr !== "-") {
+      tags.push(`[remark:${remarkStr.trim()}]`);
+    }
+    if (
+      paymentMethodStr &&
+      paymentMethodStr !== "N/A" &&
+      paymentMethodStr !== "-"
+    ) {
       tags.push(`[paymentMethod:${paymentMethodStr}]`);
     }
+    if (
+      paidAmountVal !== undefined &&
+      paidAmountVal !== null &&
+      paidAmountVal !== ""
+    ) {
+      tags.push(`[paidAmount:${paidAmountVal}]`);
+    }
+    if (
+      outstandingAmountVal !== undefined &&
+      outstandingAmountVal !== null &&
+      outstandingAmountVal !== ""
+    ) {
+      tags.push(`[outstandingAmount:${outstandingAmountVal}]`);
+    }
+    if (dueDateStr) tags.push(`[dueDate:${dueDateStr}]`);
+
     const joinedTags = tags.join(" ");
-    if (!joinedTags) return clean;
-    return clean ? `${clean} ${joinedTags}` : joinedTags;
+    if (!joinedTags) return clean === "-" ? "" : clean;
+    return clean && clean !== "-" ? `${clean} ${joinedTags}` : joinedTags;
   };
 
   const updateRemark = async (record, newRemark) => {
     const invDate = extractInvoiceDate(record);
     const payMethod = extractPaymentMethod(record);
-    const packed = packNotes(record.notes, invDate, newRemark, payMethod);
+    const paid = extractPaidAmount(record);
+    const outstanding = extractOutstandingAmount(record);
+    const dueDate = extractDueDate(record);
+    const packed = packNotes(
+      record.notes,
+      invDate,
+      newRemark,
+      payMethod,
+      paid,
+      outstanding,
+      dueDate,
+    );
 
     setRecords((prev) =>
       prev.map((r) =>
@@ -120,11 +222,17 @@ function ViewOutstanding() {
   const updatePaymentMethod = async (record, newPaymentMethod) => {
     const invDate = extractInvoiceDate(record);
     const currentRemark = extractRemark(record);
+    const paid = extractPaidAmount(record);
+    const outstanding = extractOutstandingAmount(record);
+    const dueDate = extractDueDate(record);
     const packed = packNotes(
       record.notes,
       invDate,
       currentRemark === "-" ? "" : currentRemark,
       newPaymentMethod,
+      paid,
+      outstanding,
+      dueDate,
     );
 
     setRecords((prev) =>
@@ -147,6 +255,140 @@ function ViewOutstanding() {
       });
     } catch (err) {
       console.log("Failed to update payment method:", err);
+    }
+  };
+
+  const updatePaidAmount = async (record, newPaid) => {
+    const paidNum = Number(newPaid) || 0;
+    const invAmt = Number(record.totalAmount || record.amount || 0);
+    const newOutstanding = Math.max(0, invAmt - paidNum);
+    const invDate = extractInvoiceDate(record);
+    const currentRemark = extractRemark(record);
+    const payMethod = extractPaymentMethod(record);
+    const currentDueDate = extractDueDate(record);
+
+    const autoStatus =
+      paidNum >= invAmt && invAmt > 0
+        ? "Paid"
+        : paidNum === 0 && record.status === "Paid"
+        ? "Pending"
+        : record.status;
+
+    const packed = packNotes(
+      record.notes,
+      invDate,
+      currentRemark === "-" ? "" : currentRemark,
+      payMethod,
+      paidNum,
+      newOutstanding,
+      currentDueDate,
+    );
+
+    setRecords((prev) =>
+      prev.map((r) =>
+        r._id === record._id
+          ? {
+              ...r,
+              paidAmount: paidNum,
+              outstandingAmount: newOutstanding,
+              status: autoStatus,
+              notes: packed,
+            }
+          : r,
+      ),
+    );
+
+    try {
+      await API.put(`/outstanding/${record._id}`, {
+        ...record,
+        paidAmount: paidNum,
+        outstandingAmount: newOutstanding,
+        status: autoStatus,
+        notes: packed,
+      });
+    } catch (err) {
+      console.log("Failed to update paid amount:", err);
+    }
+  };
+
+  const updateOutstandingAmount = async (record, newOutstanding) => {
+    const outstandingNum = Number(newOutstanding) || 0;
+    const invDate = extractInvoiceDate(record);
+    const currentRemark = extractRemark(record);
+    const payMethod = extractPaymentMethod(record);
+    const currentPaid = extractPaidAmount(record);
+    const currentDueDate = extractDueDate(record);
+
+    const packed = packNotes(
+      record.notes,
+      invDate,
+      currentRemark === "-" ? "" : currentRemark,
+      payMethod,
+      currentPaid,
+      outstandingNum,
+      currentDueDate,
+    );
+
+    setRecords((prev) =>
+      prev.map((r) =>
+        r._id === record._id
+          ? {
+              ...r,
+              outstandingAmount: outstandingNum,
+              notes: packed,
+            }
+          : r,
+      ),
+    );
+
+    try {
+      await API.put(`/outstanding/${record._id}`, {
+        ...record,
+        outstandingAmount: outstandingNum,
+        notes: packed,
+      });
+    } catch (err) {
+      console.log("Failed to update outstanding amount:", err);
+    }
+  };
+
+  const updateDueDate = async (record, newDueDate) => {
+    const invDate = extractInvoiceDate(record);
+    const currentRemark = extractRemark(record);
+    const payMethod = extractPaymentMethod(record);
+    const currentPaid = extractPaidAmount(record);
+    const currentOutstanding = extractOutstandingAmount(record);
+
+    const packed = packNotes(
+      record.notes,
+      invDate,
+      currentRemark === "-" ? "" : currentRemark,
+      payMethod,
+      currentPaid,
+      currentOutstanding,
+      newDueDate,
+    );
+
+    setRecords((prev) =>
+      prev.map((r) =>
+        r._id === record._id
+          ? {
+              ...r,
+              dueDate: newDueDate,
+              notes: packed,
+            }
+          : r,
+      ),
+    );
+
+    try {
+      await API.put(`/outstanding/${record._id}`, {
+        ...record,
+        dueDate: newDueDate,
+        notes: packed,
+      });
+    } catch (err) {
+      console.log("Failed to update due date:", err);
     }
   };
 
@@ -186,16 +428,6 @@ function ViewOutstanding() {
       if (match && match[1]) return match[1].trim();
     }
     return record.paymentMethod || "-";
-  };
-
-  const cleanNotes = (notesStr) => {
-    if (!notesStr) return "-";
-    const cleaned = notesStr
-      .replace(/\[invoiceDate:[^\]]+\]/g, "")
-      .replace(/\[remark:[^\]]+\]/g, "")
-      .replace(/\[paymentMethod:[^\]]+\]/g, "")
-      .trim();
-    return cleaned || "-";
   };
 
   const formatDate = (dateValue) => {
@@ -274,7 +506,7 @@ function ViewOutstanding() {
 
   const grandTotal = filteredRecords
     .filter((r) => r.status === "Pending")
-    .reduce((sum, r) => sum + Number(r.totalAmount || r.amount || 0), 0);
+    .reduce((sum, r) => sum + extractOutstandingAmount(r), 0);
 
   const displayCustomer =
     customer || (records.length > 0 ? records[0].customer : null);
@@ -410,7 +642,10 @@ function ViewOutstanding() {
                   <th className="px-3 py-2.5 text-left">Invoice Date</th>
                   <th className="px-3 py-2.5 text-left">Remarks</th>
                   <th className="px-3 py-2.5 text-center">Payment Method</th>
-                  <th className="px-3 py-2.5 text-right">Total Amount</th>
+                  <th className="px-3 py-2.5 text-right">INV Amount</th>
+                  <th className="px-3 py-2.5 text-right">Paid Amount</th>
+                  <th className="px-3 py-2.5 text-right">Outstanding Amount</th>
+                  <th className="px-3 py-2.5 text-center">Due Date</th>
                   <th className="px-3 py-2.5 text-center">Days</th>
                   <th className="px-3 py-2.5 text-center">Status</th>
                   <th className="px-3 py-2.5 text-center">Actions</th>
@@ -421,6 +656,9 @@ function ViewOutstanding() {
                 {filteredRecords.map((record) => {
                   const currentRemark = extractRemark(record);
                   const currentPayment = extractPaymentMethod(record);
+                  const currentPaid = extractPaidAmount(record);
+                  const currentOutstanding = extractOutstandingAmount(record);
+                  const currentDueDate = extractDueDate(record);
 
                   return (
                     <tr
@@ -440,13 +678,13 @@ function ViewOutstanding() {
                       </td>
 
                       {/* Editable Remark in Grid */}
-                      <td className="px-2 py-1.5 min-w-[140px] max-w-[200px]">
+                      <td className="px-2 py-1.5 min-w-[130px] max-w-[180px]">
                         <input
                           type="text"
                           defaultValue={
                             currentRemark === "-" ? "" : currentRemark
                           }
-                          key={record._id + "_" + currentRemark}
+                          key={record._id + "_rem_" + currentRemark}
                           onBlur={(e) => {
                             const val = e.target.value.trim();
                             if (
@@ -468,7 +706,7 @@ function ViewOutstanding() {
                       </td>
 
                       {/* Editable Payment Method in Grid */}
-                      <td className="px-2 py-1.5 text-center min-w-[125px]">
+                      <td className="px-2 py-1.5 text-center min-w-[120px]">
                         <select
                           value={
                             currentPayment === "-" ? "N/A" : currentPayment
@@ -486,7 +724,8 @@ function ViewOutstanding() {
                         </select>
                       </td>
 
-                      <td className="px-3 py-2 text-right font-medium text-slate-900">
+                      {/* INV Amount */}
+                      <td className="px-3 py-2 text-right font-medium text-slate-900 whitespace-nowrap">
                         Rs.{" "}
                         {Number(
                           record.totalAmount || record.amount || 0,
@@ -494,6 +733,74 @@ function ViewOutstanding() {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
+                      </td>
+
+                      {/* Editable Paid Amount in Grid */}
+                      <td className="px-2 py-1.5 min-w-[110px] max-w-[130px]">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]">
+                            Rs.
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            defaultValue={currentPaid || ""}
+                            key={record._id + "_paid_" + currentPaid}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (Number(val) !== currentPaid) {
+                                updatePaidAmount(record, val);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.target.blur();
+                            }}
+                            placeholder="0.00"
+                            className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded pl-7 pr-2 py-1 text-xs text-right text-slate-800 focus:outline-none transition shadow-sm font-medium"
+                            title="Click to edit paid amount"
+                          />
+                        </div>
+                      </td>
+
+                      {/* Editable Outstanding Amount in Grid */}
+                      <td className="px-2 py-1.5 min-w-[110px] max-w-[130px]">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]">
+                            Rs.
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            defaultValue={currentOutstanding || ""}
+                            key={record._id + "_out_" + currentOutstanding}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (Number(val) !== currentOutstanding) {
+                                updateOutstandingAmount(record, val);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.target.blur();
+                            }}
+                            placeholder="0.00"
+                            className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded pl-7 pr-2 py-1 text-xs text-right text-slate-900 focus:outline-none transition shadow-sm font-bold"
+                            title="Click to edit outstanding amount"
+                          />
+                        </div>
+                      </td>
+
+                      {/* Editable Due Date in Grid */}
+                      <td className="px-2 py-1.5 min-w-[125px]">
+                        <input
+                          type="date"
+                          defaultValue={currentDueDate || ""}
+                          key={record._id + "_due_" + (currentDueDate || "")}
+                          onChange={(e) =>
+                            updateDueDate(record, e.target.value)
+                          }
+                          className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs text-slate-700 focus:outline-none transition shadow-sm cursor-pointer"
+                          title="Click to change due date"
+                        />
                       </td>
 
                       <td className="px-3 py-2 text-center text-slate-600">
@@ -544,7 +851,7 @@ function ViewOutstanding() {
 
                 {filteredRecords.length === 0 && (
                   <tr>
-                    <td colSpan="9" className="text-center py-6 text-slate-500">
+                    <td colSpan="12" className="text-center py-6 text-slate-500">
                       {records.length === 0
                         ? "No outstanding invoices found for this customer."
                         : "No invoices match the selected date range."}
@@ -554,11 +861,11 @@ function ViewOutstanding() {
 
                 {filteredRecords.length > 0 && (
                   <tr className="bg-slate-800 text-white font-bold whitespace-nowrap">
-                    <td colSpan="5" className="px-3 py-2.5 text-sm">
+                    <td colSpan="7" className="px-3 py-2.5 text-sm">
                       Grand Total Pending
                     </td>
 
-                    <td className="px-3 py-2.5 text-right text-sm">
+                    <td className="px-3 py-2.5 text-right text-sm font-bold">
                       Rs.{" "}
                       {grandTotal.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
@@ -566,7 +873,7 @@ function ViewOutstanding() {
                       })}
                     </td>
 
-                    <td colSpan="3"></td>
+                    <td colSpan="4"></td>
                   </tr>
                 )}
               </tbody>
@@ -660,29 +967,38 @@ function ViewOutstanding() {
                 </div>
               </div>
 
-              {/* Printable Table with Remarks and Payment Method */}
-              <table className="w-full border-collapse text-[11px]">
+              {/* Printable Table */}
+              <table className="w-full border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="table-head bg-slate-800 text-white whitespace-nowrap text-[10.5px]">
-                    <th className="w-[16%] border border-slate-700 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">
-                      INVOICE NUMBER
+                  <tr className="table-head bg-slate-800 text-white whitespace-nowrap text-[10px]">
+                    <th className="w-[12%] border border-slate-700 px-1.5 py-1.5 text-left font-bold text-white whitespace-nowrap">
+                      INVOICE NO
                     </th>
-                    <th className="w-[13%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
-                      INVOICE DATE
+                    <th className="w-[10%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                      INV DATE
                     </th>
-                    <th className="w-[18%] border border-slate-700 px-2 py-1.5 text-left font-bold text-white whitespace-nowrap">
+                    <th className="w-[12%] border border-slate-700 px-1.5 py-1.5 text-left font-bold text-white whitespace-nowrap">
                       REMARKS
                     </th>
-                    <th className="w-[15%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
-                      PAYMENT METHOD
+                    <th className="w-[11%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                      METHOD
                     </th>
-                    <th className="w-[18%] border border-slate-700 px-2 py-1.5 text-right font-bold text-white whitespace-nowrap">
-                      TOTAL AMOUNT
+                    <th className="w-[12%] border border-slate-700 px-1.5 py-1.5 text-right font-bold text-white whitespace-nowrap">
+                      INV AMOUNT
                     </th>
-                    <th className="w-[10%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                    <th className="w-[11%] border border-slate-700 px-1.5 py-1.5 text-right font-bold text-white whitespace-nowrap">
+                      PAID AMOUNT
+                    </th>
+                    <th className="w-[13%] border border-slate-700 px-1.5 py-1.5 text-right font-bold text-white whitespace-nowrap">
+                      OUTSTANDING
+                    </th>
+                    <th className="w-[10%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                      DUE DATE
+                    </th>
+                    <th className="w-[7%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       DAYS
                     </th>
-                    <th className="w-[10%] border border-slate-700 px-2 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                    <th className="w-[8%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       STATUS
                     </th>
                   </tr>
@@ -692,25 +1008,25 @@ function ViewOutstanding() {
                   {filteredRecords.map((record) => (
                     <tr
                       key={record._id}
-                      className="border-b border-slate-200 hover:bg-slate-50 whitespace-nowrap text-[11px]"
+                      className="border-b border-slate-200 hover:bg-slate-50 whitespace-nowrap text-[10.5px]"
                     >
-                      <td className="border border-slate-300 px-2 py-1.5 font-semibold text-slate-900 whitespace-nowrap">
+                      <td className="border border-slate-300 px-1.5 py-1.5 font-semibold text-slate-900 whitespace-nowrap">
                         {record.invoiceNumber}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 whitespace-nowrap">
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-center text-slate-700 whitespace-nowrap">
                         {formatDate(extractInvoiceDate(record) || record.date)}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-left text-slate-700 whitespace-nowrap">
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-left text-slate-700 whitespace-nowrap max-w-[90px] truncate" title={extractRemark(record)}>
                         {extractRemark(record)}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 font-medium whitespace-nowrap">
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-center text-slate-700 font-medium whitespace-nowrap">
                         {extractPaymentMethod(record)}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-right font-medium text-slate-900 whitespace-nowrap">
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-right font-medium text-slate-900 whitespace-nowrap">
                         Rs.{" "}
                         {Number(
                           record.totalAmount || record.amount || 0,
@@ -720,11 +1036,38 @@ function ViewOutstanding() {
                         })}
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-center text-slate-700 whitespace-nowrap">
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-right text-slate-700 whitespace-nowrap">
+                        Rs.{" "}
+                        {Number(extractPaidAmount(record)).toLocaleString(
+                          "en-US",
+                          {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          },
+                        )}
+                      </td>
+
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-right font-bold text-slate-900 whitespace-nowrap">
+                        Rs.{" "}
+                        {Number(
+                          extractOutstandingAmount(record),
+                        ).toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-center text-slate-700 whitespace-nowrap">
+                        {extractDueDate(record)
+                          ? formatDate(extractDueDate(record))
+                          : "-"}
+                      </td>
+
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-center text-slate-700 whitespace-nowrap">
                         {daysBetween(record)} Days
                       </td>
 
-                      <td className="border border-slate-300 px-2 py-1.5 text-center font-semibold whitespace-nowrap">
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-center font-semibold whitespace-nowrap">
                         <span
                           className={
                             record.status === "Pending"
@@ -741,7 +1084,7 @@ function ViewOutstanding() {
                   {filteredRecords.length === 0 && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={10}
                         className="border border-slate-300 px-3 py-6 text-center text-slate-500 whitespace-nowrap"
                       >
                         No outstanding records found for the selected period.
@@ -752,7 +1095,7 @@ function ViewOutstanding() {
                   {/* Grand Total Row */}
                   <tr className="grand-total-row bg-slate-900 text-white font-bold whitespace-nowrap">
                     <td
-                      colSpan={4}
+                      colSpan={6}
                       className="border border-slate-900 px-2 py-2 text-xs font-bold tracking-wide text-white whitespace-nowrap"
                     >
                       GRAND TOTAL PENDING
@@ -767,7 +1110,7 @@ function ViewOutstanding() {
                     </td>
 
                     <td
-                      colSpan={2}
+                      colSpan={3}
                       className="border border-slate-900 px-2 py-2 text-center text-[10.5px] text-slate-300 whitespace-nowrap"
                     >
                       {filteredRecords.filter((r) => r.status === "Pending")
