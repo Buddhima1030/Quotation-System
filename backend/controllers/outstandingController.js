@@ -32,6 +32,14 @@ export const getOutstandingById = async (req, res) => {
 
 export const createOutstanding = async (req, res) => {
   try {
+    if (req.body.status === "Paid") {
+      const invAmt = Number(req.body.totalAmount || req.body.amount || 0);
+      req.body.outstandingAmount = 0;
+      if (invAmt > 0) {
+        req.body.paidAmount = invAmt;
+      }
+    }
+
     const record = await Outstanding.create(req.body);
 
     const populated = await Outstanding.findById(record._id).populate(
@@ -46,6 +54,14 @@ export const createOutstanding = async (req, res) => {
 
 export const updateOutstanding = async (req, res) => {
   try {
+    if (req.body.status === "Paid") {
+      const invAmt = Number(req.body.totalAmount || req.body.amount || 0);
+      req.body.outstandingAmount = 0;
+      if (invAmt > 0) {
+        req.body.paidAmount = invAmt;
+      }
+    }
+
     const record = await Outstanding.findByIdAndUpdate(
       req.params.id,
       req.body,

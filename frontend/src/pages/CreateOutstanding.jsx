@@ -253,10 +253,54 @@ function CreateOutstanding() {
     const updated = [...invoices];
     updated[index][field] = value;
 
-    if (field === "amount" || field === "paidAmount") {
-      const amt = Number(field === "amount" ? value : updated[index].amount) || 0;
-      const paid = Number(field === "paidAmount" ? value : updated[index].paidAmount) || 0;
+    if (field === "status") {
+      const amt = Number(updated[index].amount) || 0;
+      if (value === "Paid") {
+        updated[index].paidAmount = amt || "";
+        updated[index].outstandingAmount = 0;
+      } else if (value === "Pending") {
+        const currentPaid = Number(updated[index].paidAmount) || 0;
+        if (currentPaid >= amt && amt > 0) {
+          updated[index].paidAmount = 0;
+          updated[index].outstandingAmount = amt;
+        } else {
+          updated[index].outstandingAmount = Math.max(0, amt - currentPaid);
+        }
+      }
+    }
+
+    if (field === "amount") {
+      const amt = Number(value) || 0;
+      if (updated[index].status === "Paid") {
+        updated[index].paidAmount = amt || "";
+        updated[index].outstandingAmount = 0;
+      } else {
+        const paid = Number(updated[index].paidAmount) || 0;
+        updated[index].outstandingAmount = Math.max(0, amt - paid);
+      }
+    }
+
+    if (field === "paidAmount") {
+      const amt = Number(updated[index].amount) || 0;
+      const paid = Number(value) || 0;
       updated[index].outstandingAmount = Math.max(0, amt - paid);
+      if (paid >= amt && amt > 0) {
+        updated[index].status = "Paid";
+      } else if (paid === 0 && updated[index].status === "Paid") {
+        updated[index].status = "Pending";
+      }
+    }
+
+    if (field === "outstandingAmount") {
+      const out = Number(value) || 0;
+      const amt = Number(updated[index].amount) || 0;
+      if (out === 0 && amt > 0) {
+        updated[index].status = "Paid";
+        updated[index].paidAmount = amt;
+      } else if (out > 0 && updated[index].status === "Paid") {
+        updated[index].status = "Pending";
+        updated[index].paidAmount = Math.max(0, amt - out);
+      }
     }
 
     setInvoices(updated);
@@ -336,11 +380,16 @@ function CreateOutstanding() {
       if (isEdit) {
         const inv = invoices[0];
         const numericAmount = Number(inv.amount || 0);
-        const numericPaid = Number(inv.paidAmount || 0);
-        const numericOutstanding =
+        let numericPaid = Number(inv.paidAmount || 0);
+        let numericOutstanding =
           inv.outstandingAmount !== "" && !isNaN(Number(inv.outstandingAmount))
             ? Number(inv.outstandingAmount)
             : Math.max(0, numericAmount - numericPaid);
+
+        if (inv.status === "Paid") {
+          numericPaid = numericAmount;
+          numericOutstanding = 0;
+        }
 
         const packedNotes = packNotes(
           inv.notes,
@@ -374,11 +423,16 @@ function CreateOutstanding() {
       } else {
         const promises = invoices.map((inv) => {
           const numericAmount = Number(inv.amount || 0);
-          const numericPaid = Number(inv.paidAmount || 0);
-          const numericOutstanding =
+          let numericPaid = Number(inv.paidAmount || 0);
+          let numericOutstanding =
             inv.outstandingAmount !== "" && !isNaN(Number(inv.outstandingAmount))
               ? Number(inv.outstandingAmount)
               : Math.max(0, numericAmount - numericPaid);
+
+          if (inv.status === "Paid") {
+            numericPaid = numericAmount;
+            numericOutstanding = 0;
+          }
 
           const packedNotes = packNotes(
             inv.notes,

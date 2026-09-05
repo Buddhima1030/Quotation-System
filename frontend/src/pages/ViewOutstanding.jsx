@@ -51,12 +51,41 @@ function ViewOutstanding() {
   };
 
   const changeStatus = async (record) => {
-    try {
-      await API.put(`/outstanding/${record._id}`, {
-        ...record,
-        status: record.status === "Pending" ? "Paid" : "Pending",
-      });
+    const isNowPaid = record.status === "Pending";
+    const invAmt = Number(record.totalAmount || record.amount || 0);
+    const newStatus = isNowPaid ? "Paid" : "Pending";
+    const newPaidAmount = isNowPaid ? invAmt : 0;
+    const newOutstandingAmount = isNowPaid ? 0 : invAmt;
 
+    const invDate = extractInvoiceDate(record);
+    const currentRemark = extractRemark(record);
+    const payMethod = extractPaymentMethod(record);
+    const dueDate = extractDueDate(record);
+
+    const packed = packNotes(
+      record.notes,
+      invDate,
+      currentRemark === "-" ? "" : currentRemark,
+      payMethod,
+      newPaidAmount,
+      newOutstandingAmount,
+      dueDate,
+    );
+
+    const updatedRecord = {
+      ...record,
+      status: newStatus,
+      paidAmount: newPaidAmount,
+      outstandingAmount: newOutstandingAmount,
+      notes: packed,
+    };
+
+    setRecords((prev) =>
+      prev.map((r) => (r._id === record._id ? updatedRecord : r)),
+    );
+
+    try {
+      await API.put(`/outstanding/${record._id}`, updatedRecord);
       loadRecords();
     } catch (err) {
       console.log(err);
@@ -76,6 +105,10 @@ function ViewOutstanding() {
 
   const extractPaidAmount = (record) => {
     if (!record) return 0;
+    const invAmt = Number(record.totalAmount || record.amount || 0);
+    if (record.status === "Paid") {
+      return invAmt;
+    }
     if (
       record.paidAmount !== undefined &&
       record.paidAmount !== null &&
@@ -92,6 +125,9 @@ function ViewOutstanding() {
 
   const extractOutstandingAmount = (record) => {
     if (!record) return 0;
+    if (record.status === "Paid") {
+      return 0;
+    }
     if (
       record.outstandingAmount !== undefined &&
       record.outstandingAmount !== null &&
@@ -274,13 +310,16 @@ function ViewOutstanding() {
         ? "Pending"
         : record.status;
 
+    const finalPaid = autoStatus === "Paid" && invAmt > 0 ? invAmt : paidNum;
+    const finalOutstanding = autoStatus === "Paid" ? 0 : newOutstanding;
+
     const packed = packNotes(
       record.notes,
       invDate,
       currentRemark === "-" ? "" : currentRemark,
       payMethod,
-      paidNum,
-      newOutstanding,
+      finalPaid,
+      finalOutstanding,
       currentDueDate,
     );
 
@@ -289,8 +328,8 @@ function ViewOutstanding() {
         r._id === record._id
           ? {
               ...r,
-              paidAmount: paidNum,
-              outstandingAmount: newOutstanding,
+              paidAmount: finalPaid,
+              outstandingAmount: finalOutstanding,
               status: autoStatus,
               notes: packed,
             }
@@ -301,8 +340,8 @@ function ViewOutstanding() {
     try {
       await API.put(`/outstanding/${record._id}`, {
         ...record,
-        paidAmount: paidNum,
-        outstandingAmount: newOutstanding,
+        paidAmount: finalPaid,
+        outstandingAmount: finalOutstanding,
         status: autoStatus,
         notes: packed,
       });
@@ -313,19 +352,32 @@ function ViewOutstanding() {
 
   const updateOutstandingAmount = async (record, newOutstanding) => {
     const outstandingNum = Number(newOutstanding) || 0;
+    const invAmt = Number(record.totalAmount || record.amount || 0);
     const invDate = extractInvoiceDate(record);
     const currentRemark = extractRemark(record);
     const payMethod = extractPaymentMethod(record);
-    const currentPaid = extractPaidAmount(record);
     const currentDueDate = extractDueDate(record);
+
+    let updatedPaid = extractPaidAmount(record);
+    let autoStatus = record.status;
+
+    if (outstandingNum <= 0 && invAmt > 0) {
+      autoStatus = "Paid";
+      updatedPaid = invAmt;
+    } else if (outstandingNum > 0 && record.status === "Paid") {
+      autoStatus = "Pending";
+      updatedPaid = Math.max(0, invAmt - outstandingNum);
+    }
+
+    const finalOutstanding = autoStatus === "Paid" ? 0 : outstandingNum;
 
     const packed = packNotes(
       record.notes,
       invDate,
       currentRemark === "-" ? "" : currentRemark,
       payMethod,
-      currentPaid,
-      outstandingNum,
+      updatedPaid,
+      finalOutstanding,
       currentDueDate,
     );
 
@@ -334,7 +386,9 @@ function ViewOutstanding() {
         r._id === record._id
           ? {
               ...r,
-              outstandingAmount: outstandingNum,
+              paidAmount: updatedPaid,
+              outstandingAmount: finalOutstanding,
+              status: autoStatus,
               notes: packed,
             }
           : r,
@@ -344,7 +398,9 @@ function ViewOutstanding() {
     try {
       await API.put(`/outstanding/${record._id}`, {
         ...record,
-        outstandingAmount: outstandingNum,
+        paidAmount: updatedPaid,
+        outstandingAmount: finalOutstanding,
+        status: autoStatus,
         notes: packed,
       });
     } catch (err) {
@@ -503,6 +559,16 @@ function ViewOutstanding() {
         sensitivity: "base",
       });
     });
+
+  const totalInvAmount = filteredRecords.reduce(
+    (sum, r) => sum + Number(r.totalAmount || r.amount || 0),
+    0,
+  );
+
+  const totalPaidAmount = filteredRecords.reduce(
+    (sum, r) => sum + extractPaidAmount(r),
+    0,
+  );
 
   const grandTotal = filteredRecords
     .filter((r) => r.status === "Pending")
@@ -726,7 +792,6 @@ function ViewOutstanding() {
 
                       {/* INV Amount */}
                       <td className="px-3 py-2 text-right font-medium text-slate-900 whitespace-nowrap">
-                        Rs.{" "}
                         {Number(
                           record.totalAmount || record.amount || 0,
                         ).toLocaleString("en-US", {
@@ -737,56 +802,55 @@ function ViewOutstanding() {
 
                       {/* Editable Paid Amount in Grid */}
                       <td className="px-2 py-1.5 min-w-[110px] max-w-[130px]">
-                        <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]">
-                            Rs.
-                          </span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            defaultValue={currentPaid || ""}
-                            key={record._id + "_paid_" + currentPaid}
-                            onBlur={(e) => {
-                              const val = e.target.value.trim();
-                              if (Number(val) !== currentPaid) {
-                                updatePaidAmount(record, val);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") e.target.blur();
-                            }}
-                            placeholder="0.00"
-                            className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded pl-7 pr-2 py-1 text-xs text-right text-slate-800 focus:outline-none transition shadow-sm font-medium"
-                            title="Click to edit paid amount"
-                          />
-                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          defaultValue={
+                            currentPaid !== undefined && currentPaid !== null
+                              ? currentPaid
+                              : ""
+                          }
+                          key={record._id + "_paid_" + currentPaid}
+                          onBlur={(e) => {
+                            const val = e.target.value.trim();
+                            if (Number(val) !== currentPaid) {
+                              updatePaidAmount(record, val);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") e.target.blur();
+                          }}
+                          placeholder="0.00"
+                          className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs text-right text-slate-800 focus:outline-none transition shadow-sm font-medium"
+                          title="Click to edit paid amount"
+                        />
                       </td>
 
                       {/* Editable Outstanding Amount in Grid */}
                       <td className="px-2 py-1.5 min-w-[110px] max-w-[130px]">
-                        <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]">
-                            Rs.
-                          </span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            defaultValue={currentOutstanding || ""}
-                            key={record._id + "_out_" + currentOutstanding}
-                            onBlur={(e) => {
-                              const val = e.target.value.trim();
-                              if (Number(val) !== currentOutstanding) {
-                                updateOutstandingAmount(record, val);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") e.target.blur();
-                            }}
-                            placeholder="0.00"
-                            className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded pl-7 pr-2 py-1 text-xs text-right text-slate-900 focus:outline-none transition shadow-sm font-bold"
-                            title="Click to edit outstanding amount"
-                          />
-                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          defaultValue={
+                            currentOutstanding !== undefined &&
+                            currentOutstanding !== null
+                              ? currentOutstanding
+                              : ""
+                          }
+                          key={record._id + "_out_" + currentOutstanding}
+                          onBlur={(e) => {
+                            const val = e.target.value.trim();
+                            if (Number(val) !== currentOutstanding) {
+                              updateOutstandingAmount(record, val);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") e.target.blur();
+                          }}
+                          placeholder="0.00"
+                          className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded px-2 py-1 text-xs text-right text-slate-900 focus:outline-none transition shadow-sm font-bold"
+                          title="Click to edit outstanding amount"
+                        />
                       </td>
 
                       {/* Editable Due Date in Grid */}
@@ -861,12 +925,25 @@ function ViewOutstanding() {
 
                 {filteredRecords.length > 0 && (
                   <tr className="bg-slate-800 text-white font-bold whitespace-nowrap">
-                    <td colSpan="7" className="px-3 py-2.5 text-sm">
-                      Grand Total Pending
+                    <td colSpan="5" className="px-3 py-2.5 text-sm">
+                      Grand Total
                     </td>
 
                     <td className="px-3 py-2.5 text-right text-sm font-bold">
-                      Rs.{" "}
+                      {totalInvAmount.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+
+                    <td className="px-3 py-2.5 text-right text-sm font-bold">
+                      {totalPaidAmount.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+
+                    <td className="px-3 py-2.5 text-right text-sm font-bold">
                       {grandTotal.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -971,16 +1048,16 @@ function ViewOutstanding() {
               <table className="w-full border-collapse text-[10.5px]">
                 <thead>
                   <tr className="table-head bg-slate-800 text-white whitespace-nowrap text-[10px]">
-                    <th className="w-[12%] border border-slate-700 px-1.5 py-1.5 text-left font-bold text-white whitespace-nowrap">
-                      INVOICE NO
+                    <th className="w-[8%] border border-slate-700 px-1.5 py-1.5 text-left font-bold text-white whitespace-nowrap">
+                      INV NO
                     </th>
-                    <th className="w-[10%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                    <th className="w-[9%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       INV DATE
                     </th>
-                    <th className="w-[12%] border border-slate-700 px-1.5 py-1.5 text-left font-bold text-white whitespace-nowrap">
+                    <th className="w-[18%] border border-slate-700 px-1.5 py-1.5 text-left font-bold text-white whitespace-nowrap">
                       REMARKS
                     </th>
-                    <th className="w-[11%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                    <th className="w-[10%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       METHOD
                     </th>
                     <th className="w-[12%] border border-slate-700 px-1.5 py-1.5 text-right font-bold text-white whitespace-nowrap">
@@ -989,16 +1066,16 @@ function ViewOutstanding() {
                     <th className="w-[11%] border border-slate-700 px-1.5 py-1.5 text-right font-bold text-white whitespace-nowrap">
                       PAID AMOUNT
                     </th>
-                    <th className="w-[13%] border border-slate-700 px-1.5 py-1.5 text-right font-bold text-white whitespace-nowrap">
+                    <th className="w-[12%] border border-slate-700 px-1.5 py-1.5 text-right font-bold text-white whitespace-nowrap">
                       OUTSTANDING
                     </th>
-                    <th className="w-[10%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                    <th className="w-[9%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       DUE DATE
                     </th>
-                    <th className="w-[7%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                    <th className="w-[5%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       DAYS
                     </th>
-                    <th className="w-[8%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
+                    <th className="w-[6%] border border-slate-700 px-1.5 py-1.5 text-center font-bold text-white whitespace-nowrap">
                       STATUS
                     </th>
                   </tr>
@@ -1018,7 +1095,7 @@ function ViewOutstanding() {
                         {formatDate(extractInvoiceDate(record) || record.date)}
                       </td>
 
-                      <td className="border border-slate-300 px-1.5 py-1.5 text-left text-slate-700 whitespace-nowrap max-w-[90px] truncate" title={extractRemark(record)}>
+                      <td className="border border-slate-300 px-1.5 py-1.5 text-left text-slate-700 whitespace-nowrap max-w-[150px] truncate" title={extractRemark(record)}>
                         {extractRemark(record)}
                       </td>
 
@@ -1027,7 +1104,6 @@ function ViewOutstanding() {
                       </td>
 
                       <td className="border border-slate-300 px-1.5 py-1.5 text-right font-medium text-slate-900 whitespace-nowrap">
-                        Rs.{" "}
                         {Number(
                           record.totalAmount || record.amount || 0,
                         ).toLocaleString("en-US", {
@@ -1037,7 +1113,6 @@ function ViewOutstanding() {
                       </td>
 
                       <td className="border border-slate-300 px-1.5 py-1.5 text-right text-slate-700 whitespace-nowrap">
-                        Rs.{" "}
                         {Number(extractPaidAmount(record)).toLocaleString(
                           "en-US",
                           {
@@ -1048,7 +1123,6 @@ function ViewOutstanding() {
                       </td>
 
                       <td className="border border-slate-300 px-1.5 py-1.5 text-right font-bold text-slate-900 whitespace-nowrap">
-                        Rs.{" "}
                         {Number(
                           extractOutstandingAmount(record),
                         ).toLocaleString("en-US", {
@@ -1095,14 +1169,27 @@ function ViewOutstanding() {
                   {/* Grand Total Row */}
                   <tr className="grand-total-row bg-slate-900 text-white font-bold whitespace-nowrap">
                     <td
-                      colSpan={6}
+                      colSpan={4}
                       className="border border-slate-900 px-2 py-2 text-xs font-bold tracking-wide text-white whitespace-nowrap"
                     >
-                      GRAND TOTAL PENDING
+                      GRAND TOTAL LKR
                     </td>
 
-                    <td className="border border-slate-900 px-2 py-2 text-right text-xs font-bold text-white whitespace-nowrap">
-                      Rs.{" "}
+                    <td className="border border-slate-900 px-1.5 py-2 text-right text-xs font-bold text-white whitespace-nowrap">
+                      {totalInvAmount.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+
+                    <td className="border border-slate-900 px-1.5 py-2 text-right text-xs font-bold text-white whitespace-nowrap">
+                      {totalPaidAmount.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+
+                    <td className="border border-slate-900 px-1.5 py-2 text-right text-xs font-bold text-white whitespace-nowrap">
                       {grandTotal.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
